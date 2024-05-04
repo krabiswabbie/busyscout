@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/joomcode/errorx"
 	"github.com/krabiswabbie/busyscout/internal/telnet"
+	"github.com/schollz/progressbar/v3"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,7 +15,8 @@ import (
 )
 
 const (
-	threads   = 3
+	threads   = 10
+	retries   = 5
 	chunkSize = 1024
 	lineSize  = 128
 	tmpDir    = "/tmp"
@@ -23,6 +25,7 @@ const (
 type Scout struct {
 	localFile string
 	remote    *RemoteFile
+	bar       *progressbar.ProgressBar
 }
 
 func New(source, target string) (*Scout, error) {
@@ -82,6 +85,9 @@ func (s *Scout) Push() error {
 	jobCh := make(chan jobDefinition, totalChunks)
 	resultCh := make(chan error, totalChunks)
 
+	s.bar = progressbar.Default(int64(len(data)))
+	defer s.bar.Finish()
+
 	// Create worker pool
 	var wg sync.WaitGroup
 	for i := 0; i < threads; i++ {
@@ -89,8 +95,23 @@ func (s *Scout) Push() error {
 		go func() {
 			defer wg.Done()
 			for job := range jobCh {
-				if err := s.sendChunk(job.data, job.fname); err != nil {
-					resultCh <- err
+				var (
+					progress int
+					errSend  error
+				)
+
+				for range retries {
+					progress, errSend = s.sendChunk(job.data, job.fname)
+					if errSend == nil {
+						if errCheck := s.checkFileSize(len(job.data), job.fname); errCheck == nil {
+							// Chunk uploaded successfully
+							break
+						}
+					}
+					s.bar.Add(-1 * progress)
+				}
+				if errSend != nil {
+					resultCh <- errSend
 					return
 				}
 			}
@@ -133,17 +154,17 @@ func (s *Scout) Push() error {
 	if errDelete := s.deleteChunks(); errDelete != nil {
 		return errDelete
 	}
-	if errCheck := s.checkFileSize(len(data)); errCheck != nil {
+	if errCheck := s.checkFileSize(len(data), s.remote.Path); errCheck != nil {
 		return errCheck
 	}
 
 	return nil
 }
 
-func (s *Scout) sendChunk(data []byte, targetFileName string) error {
+func (s *Scout) sendChunk(data []byte, targetFileName string) (progress int, err error) {
 	tc, errClient := s.newClient()
 	if errClient != nil {
-		return errClient
+		return 0, errClient
 	}
 	defer tc.Close()
 
@@ -166,19 +187,19 @@ func (s *Scout) sendChunk(data []byte, targetFileName string) error {
 		// Send the command
 		_, errExecute := tc.Execute(cmd)
 		if errExecute != nil {
-			return errExecute
+			return progress, errExecute
 		}
+
+		progress += end - i
+		s.bar.Add(end - i)
 	}
 
-	return nil
+	return progress, nil
 }
 
 func (s *Scout) joinChunks(list []string) error {
-	cmd := "cat "
-	for _, e := range list {
-		cmd += e + " "
-	}
-	cmd += "> " + s.remote.Path
+	target := filepath.Join(tmpDir, "bs.*.part")
+	cmd := fmt.Sprintf("cat %s > %s", target, s.remote.Path)
 
 	tc, errClient := s.newClient()
 	if errClient != nil {
@@ -210,8 +231,8 @@ func (s *Scout) deleteChunks() error {
 	return nil
 }
 
-func (s *Scout) checkFileSize(targetSize int) error {
-	cmd := fmt.Sprintf("ls -l %s", s.remote.Path)
+func (s *Scout) checkFileSize(sz int, fname string) error {
+	cmd := fmt.Sprintf("ls -l %s", fname)
 
 	tc, errClient := s.newClient()
 	if errClient != nil {
@@ -237,7 +258,7 @@ func (s *Scout) checkFileSize(targetSize int) error {
 		if errConv != nil {
 			return errorx.Decorate(errConv, "failed to convert target file size")
 		}
-		if size != targetSize {
+		if size != sz {
 			return errors.New("failed to upload a file (incorrect size)")
 		}
 		return nil
