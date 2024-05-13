@@ -28,6 +28,9 @@ func ParseRemoteFileName(remoteFileName string) (*RemoteFile, error) {
 	creds := strings.Split(credsPart, ":")
 	var username, password string
 	if len(creds) == 2 {
+		if creds[1] == "" {
+			return nil, fmt.Errorf("invalid credentials format")
+		}
 		username = creds[0]
 		password = creds[1]
 	} else if len(creds) == 1 {
@@ -36,7 +39,7 @@ func ParseRemoteFileName(remoteFileName string) (*RemoteFile, error) {
 		return nil, fmt.Errorf("invalid credentials format")
 	}
 
-	hostAndPath := strings.SplitN(hostPart, ":", 2)
+	hostAndPath := strings.Split(hostPart, ":")
 	if len(hostAndPath) != 2 {
 		return nil, fmt.Errorf("invalid host and path format")
 	}
