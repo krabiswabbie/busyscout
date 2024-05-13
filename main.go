@@ -9,7 +9,8 @@ import (
 
 func main() {
 	if len(os.Args) != 3 {
-		fmt.Println("Usage: ./busyscout local_file remote_file")
+		fmt.Println("Usage:   ./busyscout local_file remote_path")
+		fmt.Println("Example: ./busyscout ipwiz.zip root:12345@192.168.10.18:/tmp")
 		os.Exit(0)
 	}
 
