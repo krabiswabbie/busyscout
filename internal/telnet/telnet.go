@@ -37,8 +37,11 @@ const (
 	DONT = 254
 )
 
-var loginRe *regexp.Regexp = regexp.MustCompile("[\\w\\d-_]+ login:")
-var passwordRe *regexp.Regexp = regexp.MustCompile("Password:")
+const (
+	loginRe    = "login:"
+	passwordRe = "Password:"
+)
+
 var bannerRe *regexp.Regexp = regexp.MustCompile("\\$|#")
 
 // TelnetClient is basic descriptor
@@ -265,29 +268,27 @@ func (tc *TelnetClient) ReadUntilBanner() (output []byte, err error) {
 }
 
 func (tc *TelnetClient) findInputPrompt(
-	re *regexp.Regexp,
+	prompt string,
 	responce string,
-	buffer []byte,
+	data string,
 ) bool {
-	match := re.Find(buffer)
-	if len(match) == 0 {
-		return false
+	if strings.Contains(data, prompt) {
+		tc.Write([]byte(responce + "\r\n"))
+		return true
 	}
 
-	tc.Write([]byte(responce + "\r\n"))
-
-	return true
+	return false
 }
 
 // waitWelcomeSigns waits for appearance of the first banner
 // If detect login prompt, it will authorize
 func (tc *TelnetClient) waitWelcomeSigns() (err error) {
 	_, err = tc.ReadUntilPrompt(func(data []byte) bool {
-		if tc.findInputPrompt(loginRe, tc.Login, data) {
+		if tc.findInputPrompt(loginRe, tc.Login, string(data)) {
 			tc.log("Found login prompt")
 			return false
 		}
-		if tc.findInputPrompt(passwordRe, tc.Password, data) {
+		if tc.findInputPrompt(passwordRe, tc.Password, string(data)) {
 			tc.log("Found password prompt")
 			return false
 		}
