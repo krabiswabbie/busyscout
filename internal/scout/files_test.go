@@ -13,17 +13,17 @@ func TestParseRemoteFileName(t *testing.T) {
 		expectedPath  string
 		expectedError bool
 	}{
-		{"root:12345@192.168.10.18:/tmp/filename", "root", "12345", "192.168.10.18", "/tmp/filename", false},
+		{"login:pass@192.168.10.18:/tmp/filename", "login", "pass", "192.168.10.18", "/tmp/filename", false},
 		{"user@192.168.10.18:/tmp/filename", "user", "", "192.168.10.18", "/tmp/filename", false},
 		{"192.168.10.18:/tmp/filename", "", "", "192.168.10.18", "/tmp/filename", false},
-		{"root@192.168.10.18:/tmp/filename", "root", "", "192.168.10.18", "/tmp/filename", false},
-		{"root:12345@192.168.10.18:/", "root", "12345", "192.168.10.18", "/", false},
-		{"root:12345@192.168.10.18", "root", "12345", "192.168.10.18", "", false},
-		{"root:12345@192.168.10.18:/tmp", "root", "12345", "192.168.10.18", "/tmp", false},
+		{"login@192.168.10.18:/tmp/filename", "login", "", "192.168.10.18", "/tmp/filename", false},
+		{"login:pass@192.168.10.18:/", "login", "pass", "192.168.10.18", "/", false},
+		{"login:pass@192.168.10.18", "login", "pass", "192.168.10.18", "", true},
+		{"login:pass@192.168.10.18:/tmp", "login", "pass", "192.168.10.18", "/tmp", false},
 		{"", "", "", "", "", true},
-		{"root:12345@192.168.10.18:/tmp/filename:extra", "", "", "", "", true},
-		{"root:12345:extra@192.168.10.18:/tmp/filename", "", "", "", "", true},
-		{"root:@192.168.10.18:/tmp/filename", "", "", "", "", true},
+		{"login:pass@192.168.10.18:/tmp/filename:extra", "", "", "", "", true},
+		{"login:pass:extra@192.168.10.18:/tmp/filename", "", "", "", "", true},
+		{"login:@192.168.10.18:/tmp/filename", "", "", "", "", true},
 	}
 
 	for _, tc := range testCases {
@@ -31,6 +31,9 @@ func TestParseRemoteFileName(t *testing.T) {
 
 		if (err != nil) != tc.expectedError {
 			t.Errorf("Unexpected error for input '%s'. Got error: %v", tc.input, err)
+			continue
+		}
+		if err != nil {
 			continue
 		}
 
