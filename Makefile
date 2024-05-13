@@ -22,6 +22,6 @@ clean:
 build:
 	$(foreach GOOS, $(PLATFORMS),\
 		$(foreach GOARCH, $(ARCHITECTURES),\
-			$(shell export GOOS=$(GOOS); export GOARCH=$(GOARCH); $(GOBUILD) -o $(RELEASE_DIR)/$(BINARY_NAME)-$(GOOS)-$(GOARCH))))
+			$(shell export GOOS=$(GOOS); export GOARCH=$(GOARCH); $(GOBUILD) -ldflags '-s' -o $(RELEASE_DIR)/$(BINARY_NAME)-$(GOOS)-$(GOARCH))))
 
 .PHONY: all test clean build
