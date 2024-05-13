@@ -47,6 +47,7 @@ Telnet protocol does not inherently support file transfers. However, an alternat
 printf "\xDE\xAD\xBE\xEF\x...\xF0" > /tmp/bs.0001.part
 printf "\xCA\xFE\x33\xE1\x...\xD3" > /tmp/bs.0002.part
 ...
+cat /tmp/bs.*.part > targetfile 
 ```
 
 For efficiency, file transmission is executed in parallel across multiple telnet sessions, and the data is subsequently merged into a single file.
@@ -65,4 +66,4 @@ This method was initially described [here](https://unix.stackexchange.com/a/4178
 The telnet protocol was designed in an era before security was a primary concern. While it may be the only method of interaction in some scenarios, using it comes with inherent risks. Use at your own risk.
 
 ## License
-MIT License
+[MIT License](LICENSE)
