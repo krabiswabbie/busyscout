@@ -19,19 +19,7 @@ This utility aims to enable file uploads to devices where traditional methods ar
 
 ## Usage
 
-There are two ways to get BusyScout:
-
-### Quick Way
-
-Download the compiled version for your platform from the [Releases](https://github.com/<your-username>/busyscout/releases) section.
-
-### Long Way
-
-1. Install Golang.
-2. Clone this repository.
-3. Build the utility from the source code. Ensure to review the code for security and integrity before compiling.
-
-### Example Command
+Download the compiled version for your platform from the [Releases](https://github.com/<your-username>/busyscout/releases) section OR build the utility from the source code provided.
 
 ```bash
 ./busyscout ipwiz.zip root:root@192.168.10.18:/tmp
@@ -59,8 +47,8 @@ This method was initially described [here](https://unix.stackexchange.com/a/4178
 - Capable of transferring files in environments where other methods fail.
 
 ## Disadvantages
-- Low transfer speed, approximately 2 KB/s locally and potentially less remotely.
-- No data integrity verification such as CRC or other hash functions.
+- Low transfer speed, something about 3-5 KB/s is really nice.
+- No data integrity verification such as CRC etc.
 
 ## Security Note
 The telnet protocol was designed in an era before security was a primary concern. While it may be the only method of interaction in some scenarios, using it comes with inherent risks. Use at your own risk.
