@@ -19,7 +19,7 @@ This utility aims to enable file uploads to devices where traditional methods ar
 
 ## Usage
 
-Download the compiled version for your platform from the [Releases](https://github.com/<your-username>/busyscout/releases) section OR build the utility from the source code provided.
+Download the compiled version for your platform from the [Releases](https://github.com/krabiswabbie/busyscout/releases/latest) section OR build the utility from the source code provided.
 
 ```bash
 ./busyscout ipwiz.zip root:root@192.168.10.18:/tmp
