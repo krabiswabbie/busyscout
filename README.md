@@ -21,9 +21,7 @@ This utility aims to enable file uploads to devices where traditional methods ar
 
 Download the compiled version for your platform from the [Releases](https://github.com/krabiswabbie/busyscout/releases/latest) section OR build the utility from the source code provided.
 
-```bash
-./busyscout ipwiz.zip root:root@192.168.10.18:/tmp
-```
+![](static/demo.gif)
 
 ## Rationale
 Budget IP cameras, particularly from Hikvision, Dahua etc, often use [BusyBox](https://busybox.net/) and may allow telnet access but not SSH. Other file transfer possibilities like `mount`, `tftp`, or `nc` might be occasionally available, but some cameras restrict all conventional file transfer methods. BusyScout fills this gap by allowing file transfers strictly through telnet.
