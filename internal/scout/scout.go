@@ -25,10 +25,11 @@ const (
 type Scout struct {
 	localFile string
 	remote    *RemoteFile
+	verbose   bool
 	bar       *progressbar.ProgressBar
 }
 
-func New(source, target string) (*Scout, error) {
+func New(source, target string, verboseFlag bool) (*Scout, error) {
 	_, err := os.Stat(source)
 	if err != nil {
 		return nil, errorx.Decorate(err, "source file does not exist")
@@ -42,6 +43,7 @@ func New(source, target string) (*Scout, error) {
 	s := &Scout{
 		localFile: source,
 		remote:    remote,
+		verbose:   verboseFlag,
 	}
 
 	// Add the target filename if only target directory is specified
@@ -61,6 +63,7 @@ func (s *Scout) newClient() (*telnet.TelnetClient, error) {
 		Address:  s.remote.Host,
 		Login:    s.remote.Username,
 		Password: s.remote.Password,
+		Verbose:  s.verbose,
 	}
 
 	if errDial := tc.Dial(); errDial != nil {
@@ -287,15 +290,15 @@ func (s *Scout) checkIsRemoteDirectory(path string) (bool, error) {
 	// stdout should return the following string
 	// drwxrwxrwx    9 root     root           460 May  4 08:44 /tmp
 
-	if strings.Contains(string(stdout), "No such file or directory") {
+	stdoutStr := string(stdout)
+	if strings.Contains(stdoutStr, "No such file or directory") {
 		return false, nil
 	}
 
 	// Split stdout by whitespace
 	fields := strings.Fields(string(stdout))
 
-	// Extract file size, assuming it's the 5th field
-	if len(fields) >= 5 {
+	if len(fields) >= 2 {
 		permissionsStr := fields[0] // Assuming permissions is the first
 		if permissionsStr[0] == 'd' {
 			// It is directory
