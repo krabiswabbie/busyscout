@@ -24,7 +24,7 @@ Download the compiled version for your platform from the [Releases](https://gith
 ### Command Format
 
 ```bash
-./busyscout <local_file> <remote_target>
+./busyscout <local_file> <remote_target> [--verbose]
 ```
 
 The remote target format is: `user:pass@host:directory`
@@ -36,6 +36,9 @@ busyscout firmware.bin admin:12345@192.168.1.100:/tmp
 
 # IPv6
 busyscout firmware.bin admin:12345@[2001:db8::1]:/tmp
+
+# With verbose logging
+busyscout firmware.bin admin:12345@192.168.1.100:/tmp --verbose
 ```
 
 ![](static/demo.gif)
