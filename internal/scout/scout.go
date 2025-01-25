@@ -9,6 +9,7 @@ import (
 	"github.com/schollz/progressbar/v3"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +28,8 @@ type Scout struct {
 	remote    *RemoteFile
 	bar       *progressbar.ProgressBar
 }
+
+var LsOutputRegexp = regexp.MustCompile(`(-|d)([-rwx]{9})\s+(\d+)\s+(\w+)\s+(\w+)\s+(\d+)\s+([A-Za-z]+\s+\d+\s+\d{2}:\d{2})`)
 
 func New(source, target string) (*Scout, error) {
 	_, err := os.Stat(source)
@@ -259,10 +262,14 @@ func (s *Scout) checkFileSize(sz int, fname string) error {
 	// stdout should return the following string
 	// -rw-r--r--    1 root     root         14472 May  4 06:08 filename
 
-	// Split output by whitespace and try to parse each field as integer
-	fields := strings.Fields(string(stdout))
-	for _, field := range fields {
-		if size, err := strconv.Atoi(field); err == nil && size == sz {
+	stdoutStr := string(stdout)
+
+	matchRes := LsOutputRegexp.FindStringSubmatch(stdoutStr)
+
+	if matchRes != nil {
+		sizeStr := matchRes[6] // Assuming size is the 5th field
+
+		if size, err := strconv.Atoi(sizeStr); err == nil && size == sz {
 			return nil
 		}
 	}
@@ -287,20 +294,17 @@ func (s *Scout) checkIsRemoteDirectory(path string) (bool, error) {
 	// stdout should return the following string
 	// drwxrwxrwx    9 root     root           460 May  4 08:44 /tmp
 
-	if strings.Contains(string(stdout), "No such file or directory") {
+	stdoutStr := string(stdout)
+
+	if strings.Contains(stdoutStr, "No such file or directory") {
 		return false, nil
 	}
 
-	// Split stdout by whitespace
-	fields := strings.Fields(string(stdout))
+	matchRes := LsOutputRegexp.FindStringSubmatch(stdoutStr)
 
-	// Extract file size, assuming it's the 5th field
-	if len(fields) >= 5 {
-		permissionsStr := fields[0] // Assuming permissions is the first
-		if permissionsStr[0] == 'd' {
-			// It is directory
-			return true, nil
-		}
+	if matchRes != nil {
+		permissionsStr := matchRes[1] // Assuming permissions is the first
+		return permissionsStr[0] == 'd', nil
 	}
 
 	return false, errors.New("unable to parse target file size from stdout")
