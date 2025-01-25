@@ -21,6 +21,19 @@ This utility aims to enable file uploads to devices where traditional methods ar
 
 Download the compiled version for your platform from the [Releases](https://github.com/krabiswabbie/busyscout/releases/latest) section OR build the utility from the source code provided.
 
+### Command Format
+
+```bash
+./busyscout <local_file> <remote_target>
+```
+
+The remote target format is: `user:pass@host:directory`
+
+Example:
+```bash
+./busyscout firmware.bin admin:123456@192.168.1.18:/tmp
+```
+
 ![](static/demo.gif)
 
 ## Rationale
@@ -45,8 +58,8 @@ This method was initially described [here](https://unix.stackexchange.com/a/4178
 - Capable of transferring files in environments where other methods fail.
 
 ## Disadvantages
-- Low transfer speed, something about 3-5 KB/s is really nice.
-- No data integrity verification such as CRC etc.
+- Low transfer speed, something about 3-5 kB/s is really nice.
+- No data integrity verification such as CRC etc. Only target file size is verified.
 
 ## Security Note
 The telnet protocol was designed in an era before security was a primary concern. While it may be the only method of interaction in some scenarios, using it comes with inherent risks. Use at your own risk.
