@@ -27,11 +27,12 @@ type Scout struct {
 	localFile string
 	remote    *RemoteFile
 	bar       *progressbar.ProgressBar
+	verbose   bool
 }
 
 var LsOutputRegexp = regexp.MustCompile(`(-|d)([-rwx]{9})\s+(\d+)\s+(\w+)\s+(\w+)\s+(\d+)\s+([A-Za-z]+\s+\d+\s+\d{2}:\d{2})`)
 
-func New(source, target string) (*Scout, error) {
+func New(source, target string, verboseFlag bool) (*Scout, error) {
 	_, err := os.Stat(source)
 	if err != nil {
 		return nil, errorx.Decorate(err, "source file does not exist")
@@ -45,6 +46,7 @@ func New(source, target string) (*Scout, error) {
 	s := &Scout{
 		localFile: source,
 		remote:    remote,
+		verbose:   verboseFlag,
 	}
 
 	// Add the target filename if only target directory is specified
@@ -64,6 +66,7 @@ func (s *Scout) newClient() (*telnet.TelnetClient, error) {
 		Address:  s.remote.Host,
 		Login:    s.remote.Username,
 		Password: s.remote.Password,
+		Verbose:  s.verbose,
 	}
 
 	if errDial := tc.Dial(); errDial != nil {
