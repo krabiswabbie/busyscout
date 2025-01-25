@@ -1,7 +1,8 @@
 package scout
 
 import (
-	"fmt"
+	"errors"
+	"net"
 	"strings"
 )
 
@@ -12,40 +13,63 @@ type RemoteFile struct {
 	Path     string
 }
 
-func ParseRemoteFileName(remoteFileName string) (*RemoteFile, error) {
-	parts := strings.Split(remoteFileName, "@")
-
-	var credsPart, hostPart string
-	if len(parts) == 2 {
-		credsPart = parts[0]
-		hostPart = parts[1]
-	} else if len(parts) == 1 {
-		hostPart = parts[0]
-	} else {
-		return nil, fmt.Errorf("invalid remote file name format")
+// ParseRemoteFileName is IPv6-compatible now
+func ParseRemoteFileName(input string) (*RemoteFile, error) {
+	if input == "" {
+		return nil, errors.New("empty input")
 	}
 
-	creds := strings.Split(credsPart, ":")
-	var username, password string
-	if len(creds) == 2 {
-		if creds[1] == "" {
-			return nil, fmt.Errorf("invalid credentials format")
+	var username, password, host, path string
+	hostEnd := strings.Index(input, ":/")
+	if hostEnd == -1 {
+		return nil, errors.New("invalid format: missing path separator")
+	}
+
+	hostPart := input[:hostEnd]
+	path = input[hostEnd+1:]
+
+	// Handle IPv6 addresses
+	if openBracket := strings.Index(hostPart, "["); openBracket > 0 {
+		closeBracket := strings.LastIndex(hostPart, "]")
+		if closeBracket == -1 {
+			return nil, errors.New("invalid IPv6 address: missing closing bracket")
 		}
-		username = creds[0]
-		password = creds[1]
-	} else if len(creds) == 1 {
-		username = creds[0]
-	} else if len(creds) > 2 {
-		return nil, fmt.Errorf("invalid credentials format")
+		if closeBracket != len(hostPart)-1 && hostPart[closeBracket+1] != '@' {
+			return nil, errors.New("invalid IPv6 format")
+		}
+
+		ipv6Addr := hostPart[openBracket+1 : closeBracket]
+		if ip := net.ParseIP(ipv6Addr); ip == nil {
+			return nil, errors.New("invalid IPv6 address format")
+		}
 	}
 
-	hostAndPath := strings.Split(hostPart, ":")
-	if len(hostAndPath) != 2 {
-		return nil, fmt.Errorf("invalid host and path format")
+	// Extract credentials
+	if atIdx := strings.LastIndex(hostPart, "@"); atIdx != -1 {
+		credentials := hostPart[:atIdx]
+		host = hostPart[atIdx+1:]
+
+		if strings.Count(credentials, ":") > 1 {
+			return nil, errors.New("invalid credentials format")
+		}
+
+		credParts := strings.Split(credentials, ":")
+		if len(credParts) == 2 {
+			if credParts[1] == "" {
+				return nil, errors.New("invalid password format")
+			}
+			username = credParts[0]
+			password = credParts[1]
+		} else {
+			username = credentials
+		}
+	} else {
+		host = hostPart
 	}
 
-	host := hostAndPath[0]
-	path := hostAndPath[1]
+	if strings.Count(path, ":") > 0 {
+		return nil, errors.New("invalid path format")
+	}
 
 	return &RemoteFile{
 		Username: username,

@@ -82,7 +82,11 @@ func (tc *TelnetClient) Dial() (err error) {
 	tc.setDefaultParams()
 
 	tc.log("Trying connect to %s:%s", tc.Address, tc.Port)
-	tc.conn, err = net.Dial("tcp", tc.Address+":"+tc.Port)
+	address := tc.Address
+	if strings.Contains(address, ":") && !strings.Contains(address, "[") {
+		address = "[" + address + "]"
+	}
+	tc.conn, err = net.Dial("tcp", address+":"+tc.Port)
 	if err != nil {
 		return
 	}
