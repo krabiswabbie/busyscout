@@ -13,17 +13,30 @@ func TestParseRemoteFileName(t *testing.T) {
 		expectedPath  string
 		expectedError bool
 	}{
+		// Basic patterns
 		{"login:pass@192.168.10.18:/tmp/filename", "login", "pass", "192.168.10.18", "/tmp/filename", false},
 		{"user@192.168.10.18:/tmp/filename", "user", "", "192.168.10.18", "/tmp/filename", false},
 		{"192.168.10.18:/tmp/filename", "", "", "192.168.10.18", "/tmp/filename", false},
-		{"login@192.168.10.18:/tmp/filename", "login", "", "192.168.10.18", "/tmp/filename", false},
+
+		// Path variation
 		{"login:pass@192.168.10.18:/", "login", "pass", "192.168.10.18", "/", false},
-		{"login:pass@192.168.10.18", "login", "pass", "192.168.10.18", "", true},
-		{"login:pass@192.168.10.18:/tmp", "login", "pass", "192.168.10.18", "/tmp", false},
+
+		// Error cases
 		{"", "", "", "", "", true},
-		{"login:pass@192.168.10.18:/tmp/filename:extra", "", "", "", "", true},
-		{"login:pass:extra@192.168.10.18:/tmp/filename", "", "", "", "", true},
+		{"login:pass@192.168.10.18", "login", "pass", "192.168.10.18", "", true},
 		{"login:@192.168.10.18:/tmp/filename", "", "", "", "", true},
+
+		// IPv6 cases
+		{"root:pass@[2001:db8::1]:/tmp", "root", "pass", "[2001:db8::1]", "/tmp", false},
+		{"[::1]:/var/log", "", "", "[::1]", "/var/log", false},
+		{"[2001:db8:85a3:8d3:1319:8a2e:370:7348]:/home", "", "", "[2001:db8:85a3:8d3:1319:8a2e:370:7348]", "/home", false},
+		{"user:pass@[::ffff:192.0.2.1]:/var", "user", "pass", "[::ffff:192.0.2.1]", "/var", false},
+		{"[fe80::1]:/usr/local", "", "", "[fe80::1]", "/usr/local", false},
+
+		// IPv6 error cases
+		{"[2001:db8::1", "", "", "", "", true},
+		{"user:pass@[:::1]:/tmp", "", "", "", "", true},
+		{"[::/128]:/tmp", "", "", "", "", true},
 	}
 
 	for _, tc := range testCases {

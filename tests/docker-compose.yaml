@@ -1,0 +1,14 @@
+services:
+  telnet-server:
+    image: wistic/telnetd
+    ports:
+      - "23:23"
+    networks:
+      - telnet-net
+
+networks:
+  telnet-net:
+    enable_ipv6: true
+
+## telnet ::1
+## user:password
