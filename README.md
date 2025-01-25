@@ -31,7 +31,11 @@ The remote target format is: `user:pass@host:directory`
 
 Example:
 ```bash
-./busyscout firmware.bin admin:123456@192.168.1.18:/tmp
+# IPv4
+busyscout firmware.bin admin:12345@192.168.1.100:/tmp
+
+# IPv6
+busyscout firmware.bin admin:12345@[2001:db8::1]:/tmp
 ```
 
 ![](static/demo.gif)
