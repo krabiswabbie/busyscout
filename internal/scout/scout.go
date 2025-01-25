@@ -85,7 +85,18 @@ func (s *Scout) Push() error {
 	jobCh := make(chan jobDefinition, totalChunks)
 	resultCh := make(chan error, totalChunks)
 
-	s.bar = progressbar.Default(int64(len(data)))
+	s.bar = progressbar.NewOptions(len(data),
+		progressbar.OptionSetDescription("Uploading"),
+		progressbar.OptionShowBytes(true),
+		progressbar.OptionShowCount(),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "=",
+			SaucerHead:    ">",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+	)
 	defer s.bar.Finish()
 
 	// Create worker pool
@@ -248,20 +259,12 @@ func (s *Scout) checkFileSize(sz int, fname string) error {
 	// stdout should return the following string
 	// -rw-r--r--    1 root     root         14472 May  4 06:08 filename
 
-	// Split stdout by whitespace
+	// Split output by whitespace and try to parse each field as integer
 	fields := strings.Fields(string(stdout))
-
-	// Extract file size, assuming it's the 5th field
-	if len(fields) >= 5 {
-		sizeStr := fields[4] // Assuming size is the 5th field
-		size, errConv := strconv.Atoi(sizeStr)
-		if errConv != nil {
-			return errorx.Decorate(errConv, "failed to convert target file size")
+	for _, field := range fields {
+		if size, err := strconv.Atoi(field); err == nil && size == sz {
+			return nil
 		}
-		if size != sz {
-			return errors.New("failed to upload a file (incorrect size)")
-		}
-		return nil
 	}
 
 	return errors.New("unable to parse target file size from stdout")
