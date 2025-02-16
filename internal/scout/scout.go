@@ -52,7 +52,7 @@ func New(source, target string, verboseFlag bool) (*Scout, error) {
 		return nil, errorx.Decorate(err, "failed to check remote directory")
 	}
 	if isDir {
-		s.remote.Path = filepath.Join(s.remote.Path, filepath.Base(source))
+		s.remote.Path = toUnixPath(filepath.Join(s.remote.Path, filepath.Base(source)))
 	}
 
 	return s, nil
@@ -182,7 +182,10 @@ func (s *Scout) sendChunk(data []byte, targetFileName string) (progress int, err
 	}
 	defer tc.Close()
 
+	// Ensure target filename uses forward slashes
+	targetFileName = toUnixPath(targetFileName)
 	redirectMode := ">"
+
 	// Iterate over the full chunk in 128 byte steps
 	for i := 0; i < len(data); i += lineSize {
 		end := i + lineSize
@@ -212,8 +215,13 @@ func (s *Scout) sendChunk(data []byte, targetFileName string) (progress int, err
 }
 
 func (s *Scout) joinChunks(list []string) error {
-	target := filepath.Join(tmpDir, "bs.*.part")
-	cmd := fmt.Sprintf("cat %s > %s", target, s.remote.Path)
+	// Ensure all paths use forward slashes
+	for i := range list {
+		list[i] = toUnixPath(list[i])
+	}
+
+	target := toUnixPath(filepath.Join(tmpDir, "bs.*.part"))
+	cmd := fmt.Sprintf("cat %s > %s", target, toUnixPath(s.remote.Path))
 
 	tc, errClient := s.newClient()
 	if errClient != nil {
@@ -229,7 +237,7 @@ func (s *Scout) joinChunks(list []string) error {
 }
 
 func (s *Scout) deleteChunks() error {
-	target := filepath.Join(tmpDir, "bs.*.part")
+	target := toUnixPath(filepath.Join(tmpDir, "bs.*.part"))
 	cmd := "rm " + target
 
 	tc, errClient := s.newClient()
@@ -246,7 +254,7 @@ func (s *Scout) deleteChunks() error {
 }
 
 func (s *Scout) checkFileSize(sz int, fname string) error {
-	cmd := fmt.Sprintf("ls -l %s", fname)
+	cmd := fmt.Sprintf("ls -l %s", toUnixPath(fname))
 
 	tc, errClient := s.newClient()
 	if errClient != nil {
@@ -274,7 +282,7 @@ func (s *Scout) checkFileSize(sz int, fname string) error {
 }
 
 func (s *Scout) checkIsRemoteDirectory(path string) (bool, error) {
-	cmd := fmt.Sprintf("ls -ld %s", path)
+	cmd := fmt.Sprintf("ls -ld %s", toUnixPath(path))
 
 	tc, errClient := s.newClient()
 	if errClient != nil {
@@ -307,4 +315,9 @@ func (s *Scout) checkIsRemoteDirectory(path string) (bool, error) {
 	}
 
 	return false, errors.New("unable to parse target file size from stdout")
+}
+
+// toUnixPath converts a path to use forward slashes, regardless of platform
+func toUnixPath(path string) string {
+	return strings.ReplaceAll(path, "\\", "/")
 }
