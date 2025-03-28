@@ -10,6 +10,7 @@ type RemoteFile struct {
 	Username string
 	Password string
 	Host     string
+	Port     string
 	Path     string
 }
 
@@ -67,6 +68,20 @@ func ParseRemoteFileName(input string) (*RemoteFile, error) {
 		host = hostPart
 	}
 
+	// Extract port from host if present
+	port := "23"
+	if colonIdx := strings.LastIndex(host, ":"); colonIdx != -1 {
+		// In case of IPv6 address, ensure the colon is not part of the address
+		if closeBracket := strings.LastIndex(host, "]"); (closeBracket != -1 && closeBracket < colonIdx) || closeBracket == -1 {
+			hostPart = host[:colonIdx]
+			port = host[colonIdx+1:]
+			if port == "" {
+				return nil, errors.New("invalid port format")
+			}
+			host = hostPart
+		}
+	}
+
 	if strings.Count(path, ":") > 0 {
 		return nil, errors.New("invalid path format")
 	}
@@ -75,6 +90,7 @@ func ParseRemoteFileName(input string) (*RemoteFile, error) {
 		Username: username,
 		Password: password,
 		Host:     host,
+		Port:     port,
 		Path:     path,
 	}, nil
 }

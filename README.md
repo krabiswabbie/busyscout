@@ -34,6 +34,9 @@ Example:
 # IPv4
 busyscout firmware.bin admin:12345@192.168.1.100:/tmp
 
+# IPv4 with specific port
+busyscout firmware.bin admin:12345@192.168.1.100:2323:/tmp
+
 # IPv6
 busyscout firmware.bin admin:12345@[2001:db8::1]:/tmp
 
