@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*' # Trigger on any tag starting with 'v'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Binaries
@@ -46,7 +49,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           draft: true
-          token: ${{ secrets.GITHUB_TOKEN }}
           name: ${{ env.RELEASE_NAME }}
           body: |
             ## BusyScout ${{ env.TAG_NAME }}
