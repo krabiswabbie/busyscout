@@ -7,9 +7,13 @@ import (
 	"os"
 )
 
+// Version will be injected at build time
+var Version = "dev"
+
 func main() {
 	argsCount := len(os.Args)
 	if argsCount < 3 || argsCount > 4 || argsCount == 4 && os.Args[3] != "--verbose" {
+		fmt.Printf("busyscout %s\n", Version)
 		fmt.Println("Usage:   ./busyscout local_file remote_path [--verbose]")
 		fmt.Println("Example: ./busyscout ipwiz.zip root:12345@192.168.10.18:/tmp")
 		os.Exit(0)

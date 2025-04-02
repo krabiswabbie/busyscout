@@ -1,0 +1,61 @@
+name: Build on Tag
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on any tag starting with 'v'
+
+jobs:
+  build:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # This ensures git history is available for versioning
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22.2'
+
+      - name: Extract tag name
+        id: tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Set release name
+        id: release_name
+        run: echo "RELEASE_NAME=BusyScout ${{ env.TAG_NAME }} - Draft Release" >> $GITHUB_ENV
+
+      - name: Build binaries
+        run: make build
+
+      - name: Upload binaries as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: releases/*
+          retention-days: 5
+
+      - name: Create draft release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          name: ${{ env.RELEASE_NAME }}
+          body: |
+            ## BusyScout ${{ env.TAG_NAME }}
+
+            [Add your release description here]
+
+            ### Changes
+            - [Add notable changes]
+            - [Add new features]
+            - [Add bug fixes]
+
+            ### Downloads
+            - Windows: `busyscout-windows-amd64`
+            - Linux: `busyscout-linux-amd64`
+            - macOS: `busyscout-darwin-amd64`
+          files: releases/*
