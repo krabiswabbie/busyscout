@@ -61,6 +61,7 @@ func New(source, target string, verboseFlag bool) (*Scout, error) {
 func (s *Scout) newClient() (*telnet.TelnetClient, error) {
 	tc := &telnet.TelnetClient{
 		Address:  s.remote.Host,
+		Port:     s.remote.Port,
 		Login:    s.remote.Username,
 		Password: s.remote.Password,
 		Verbose:  s.verbose,
