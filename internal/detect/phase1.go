@@ -50,7 +50,7 @@ func runPhase1(fp *Fingerprint, rm *scout.RemoteFile, verbose bool) error {
 
 	// Optional tools
 	fileOut, _ := tc.Execute("file", "/bin/busybox")
-	odOut, _ := tc.Execute("sh -c 'od -An -t x1 -N20 /bin/busybox 2>/dev/null | head -1'")
+	odOut, _ := tc.Execute("sh -c 'od -An -t x1 -N20 /bin/busybox 2>/dev/null'")
 	readelfOut, _ := tc.Execute("sh -c 'readelf -A /bin/busybox 2>/dev/null | grep -E \"Tag_CPU_arch|Tag_ABI_VFP|Tag_FP_arch\"'")
 
 	// --- Parse ---
@@ -199,7 +199,6 @@ func parseLibc(output string, fp *Fingerprint) {
 	case strings.Contains(output, "ld-musl"):
 		fp.Libc = "musl"
 	case strings.Contains(output, "ld-uClibc"):
-		fp.Libc = "uClibc"
 		fp.Libc = extractUclibcVersion(output)
 	case strings.Contains(output, "libc.so.6") || strings.Contains(output, "ld-linux"):
 		fp.Libc = "glibc"
@@ -283,6 +282,8 @@ func parseFileOutput(output string, fp *Fingerprint) {
 	}
 
 	switch {
+	case strings.Contains(lower, "aarch64"):
+		fp.ISA = "aarch64"
 	case strings.Contains(lower, "arm"):
 		fp.ISA = "arm"
 		// Try to extract version
@@ -290,8 +291,6 @@ func parseFileOutput(output string, fp *Fingerprint) {
 		if m := re.FindStringSubmatch(output); m != nil {
 			fp.ARMSubArch = "v" + m[1]
 		}
-	case strings.Contains(lower, "aarch64"):
-		fp.ISA = "aarch64"
 	case strings.Contains(lower, "mips"):
 		fp.ISA = "mips"
 	case strings.Contains(lower, "80386") || strings.Contains(lower, "i386"):
@@ -305,7 +304,7 @@ func parseFileOutput(output string, fp *Fingerprint) {
 // Example: " 7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 02 00 28 00"
 func parseODOutput(output string, fp *Fingerprint) {
 	fields := strings.Fields(strings.TrimSpace(output))
-	if len(fields) < 19 {
+	if len(fields) < 20 {
 		return
 	}
 
@@ -323,9 +322,10 @@ func parseODOutput(output string, fp *Fingerprint) {
 		fp.Endianness = "big"
 	}
 
-	// Bytes 18-19: e_machine (little-endian interpretation)
-	if fp.Endianness == "little" && len(fields) >= 19 {
-		em := fields[17] + fields[18] // LE: low byte first
+	// Bytes 18-19: e_machine (fields[18] = byte 18, fields[19] = byte 19)
+	// e_machine is a 16-bit field at ELF offset 18 (0-indexed)
+	if fp.Endianness == "little" {
+		em := fields[18] + fields[19] // LE: low byte first (fields[18]=low, fields[19]=high)
 		switch em {
 		case "2800":
 			fp.ISA = "arm"
@@ -338,8 +338,8 @@ func parseODOutput(output string, fp *Fingerprint) {
 		case "3e00":
 			fp.ISA = "x86_64"
 		}
-	} else if fp.Endianness == "big" && len(fields) >= 19 {
-		em := fields[17] + fields[18] // BE: high byte first
+	} else if fp.Endianness == "big" {
+		em := fields[18] + fields[19] // BE: high byte first
 		switch em {
 		case "0028":
 			fp.ISA = "arm"
