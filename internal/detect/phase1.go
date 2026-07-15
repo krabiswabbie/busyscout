@@ -110,6 +110,9 @@ func runPhase1(fp *Fingerprint, rm *scout.RemoteFile, verbose bool) error {
 // parseUname extracts ISA and word size from "uname -a" output.
 // Typical: "Linux (none) 3.0.8 #7 PREEMPT Thu Jan 1 00:00:00 CST 1970 armv7l GNU/Linux"
 func parseUname(output string, fp *Fingerprint) {
+	// Save full uname -a as KernelVersion
+	fp.KernelVersion = strings.TrimSpace(output)
+
 	for pattern, info := range unameMap {
 		if strings.Contains(output, pattern) {
 			fp.ISA = info.ISA
@@ -152,6 +155,14 @@ func parseCPUInfo(output string, fp *Fingerprint) {
 			if strings.Contains(strings.ToLower(model), "armv6") && fp.ARMSubArch == "" {
 				fp.ARMSubArch = "v6"
 			}
+		}
+	}
+
+	// Device model — Hardware field
+	if strings.Contains(output, "Hardware") {
+		re := regexp.MustCompile(`Hardware\s*:\s*(.+)`)
+		if m := re.FindStringSubmatch(output); m != nil {
+			fp.DeviceModel = strings.TrimSpace(m[1])
 		}
 	}
 
@@ -369,6 +380,9 @@ func parseReadelfOutput(output string, fp *Fingerprint) {
 
 // parseProcVersion extracts architecture from /proc/version when uname fails.
 func parseProcVersion(output string, fp *Fingerprint) {
+	// Save full /proc/version as KernelBuild
+	fp.KernelBuild = strings.TrimSpace(output)
+
 	lower := strings.ToLower(output)
 	switch {
 	case strings.Contains(lower, "aarch64"):
