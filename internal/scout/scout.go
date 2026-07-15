@@ -183,35 +183,12 @@ func (s *Scout) sendChunk(data []byte, targetFileName string) (progress int, err
 	}
 	defer tc.Close()
 
-	// Ensure target filename uses forward slashes
-	targetFileName = toUnixPath(targetFileName)
-	redirectMode := ">"
-
-	// Iterate over the full chunk in 128 byte steps
-	for i := 0; i < len(data); i += lineSize {
-		end := i + lineSize
-		if end > len(data) {
-			end = len(data)
-		}
-
-		// Construct the command for the current sub-chunk
-		cmd := "printf '"
-		for _, bt := range data[i:end] {
-			cmd += fmt.Sprintf("\\x%02x", bt)
-		}
-		cmd += fmt.Sprintf("' %s %s\n", redirectMode, targetFileName) // Append to the file
-		redirectMode = ">>"
-
-		// Send the command
-		_, errExecute := tc.Execute(cmd)
-		if errExecute != nil {
-			return progress, errExecute
-		}
-
-		progress += end - i
-		s.bar.Add(end - i)
+	if errSend := UploadData(tc, data, toUnixPath(targetFileName)); errSend != nil {
+		return 0, errSend
 	}
 
+	progress = len(data)
+	s.bar.Add(progress)
 	return progress, nil
 }
 
