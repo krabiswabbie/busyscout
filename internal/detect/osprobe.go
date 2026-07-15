@@ -45,13 +45,14 @@ func probeOS(tc *telnet.TelnetClient, fp *Fingerprint) {
 		fp.TotalRAM = parseMeminfoTotal(string(out))
 	}
 
-	// df /
-	if out, err := tc.Execute("sh", "-c", "df / 2>/dev/null || df 2>/dev/null"); err == nil && len(out) > 0 {
+	// df — use -h for human-readable; fallback to raw 1K-blocks if -h unsupported
+	if out, err := tc.Execute("sh", "-c", "df -h / 2>/dev/null || df -h 2>/dev/null"); err == nil && len(out) > 0 {
 		fp.RootFSUsage = parseDFRoot(string(out))
 	}
 
-	// mounts
-	if out, err := tc.Execute("sh", "-c", "mount 2>/dev/null || cat /proc/mounts"); err == nil && len(out) > 0 {
+	// mounts — try /proc/mounts first (correct space-separated format),
+	// fall back to `mount` (different format: "device on / type fstype (flags)")
+	if out, err := tc.Execute("sh", "-c", "cat /proc/mounts 2>/dev/null || mount"); err == nil && len(out) > 0 {
 		fp.Mounts = parseMountsFiltered(string(out))
 	}
 
@@ -100,8 +101,10 @@ func parseGlibcVersion(output string) string {
 func parseMeminfoTotal(output string) string {
 	re := regexp.MustCompile(`MemTotal:\s*(\d+)\s*kB`)
 	if m := re.FindStringSubmatch(output); m != nil {
-		kb := 0
-		fmt.Sscanf(m[1], "%d", &kb)
+		var kb int
+		if _, err := fmt.Sscanf(m[1], "%d", &kb); err != nil {
+			return ""
+		}
 		mb := int(math.Round(float64(kb) / 1024.0))
 		if mb < 1 {
 			mb = 1
@@ -113,6 +116,9 @@ func parseMeminfoTotal(output string) string {
 
 // parseDFRoot extracts usage info for root filesystem.
 // Handles both "df /" and full "df" output — takes the second line (first data row).
+//
+// With -h flag: columns are human-readable (e.g. "12M", "8.1M").
+// Without -h: columns are raw 1K-blocks — converted to human-readable in parser.
 func parseDFRoot(output string) string {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) < 2 {
@@ -123,12 +129,19 @@ func parseDFRoot(output string) string {
 	if len(data) < 4 {
 		return ""
 	}
-	// Typical columns: Filesystem 1K-blocks Used Available Use% Mounted
+	// Typical columns: Filesystem Size/1K-blocks Used Available Use% Mounted
 	used := data[2]
 	avail := data[3]
 	pct := ""
 	if len(data) >= 5 {
 		pct = data[4]
+	}
+	// If values have no size suffix (no trailing letter), they are raw 1K-blocks
+	if !hasSizeSuffix(used) {
+		used = formatSize1K(used)
+	}
+	if !hasSizeSuffix(avail) {
+		avail = formatSize1K(avail)
 	}
 	if pct != "" {
 		return fmt.Sprintf("%s / %s (%s)", used, avail, pct)
@@ -136,9 +149,41 @@ func parseDFRoot(output string) string {
 	return fmt.Sprintf("%s / %s", used, avail)
 }
 
+// hasSizeSuffix reports whether s ends with a size suffix letter (K, M, G, T, etc.).
+func hasSizeSuffix(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	last := s[len(s)-1]
+	return (last >= 'A' && last <= 'Z') || (last >= 'a' && last <= 'z')
+}
+
+// formatSize1K converts a raw 1K-block count string (e.g. "8304") to human-readable (e.g. "8M").
+func formatSize1K(raw string) string {
+	var blocks int64
+	if _, err := fmt.Sscanf(raw, "%d", &blocks); err != nil {
+		return raw // return as-is on parse failure
+	}
+	bytes := blocks * 1024
+	switch {
+	case bytes >= 1073741824: // 1 GiB
+		return fmt.Sprintf("%dG", bytes/1073741824)
+	case bytes >= 1048576: // 1 MiB
+		return fmt.Sprintf("%dM", bytes/1048576)
+	case bytes >= 1024: // 1 KiB
+		return fmt.Sprintf("%dK", bytes/1024)
+	default:
+		return fmt.Sprintf("%dB", bytes)
+	}
+}
+
 // parseMountsFiltered filters mount output to interesting mount points.
 // Keeps: /, /tmp, /var, /mnt, /config, /data, /home, /system.
 // Format: "/tmp : tmpfs,rw"
+//
+// Handles two input formats:
+//   - /proc/mounts: "device mountpoint fstype options ..." (space-separated)
+//   - mount command: "device on mountpoint type fstype (flags)" (with " on " and " type ")
 func parseMountsFiltered(output string) []string {
 	interesting := map[string]bool{
 		"/": true, "/tmp": true, "/var": true, "/mnt": true,
@@ -147,18 +192,33 @@ func parseMountsFiltered(output string) []string {
 
 	var result []string
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 3 {
-			continue
-		}
-		mountPoint := fields[1] // /proc/mounts: device mountpoint fstype options
-		if _, ok := interesting[mountPoint]; ok {
-			fstype := fields[2]
-			flags := ""
-			if len(fields) >= 4 {
-				flags = strings.TrimPrefix(fields[3], "(")
-				flags = strings.TrimSuffix(flags, ")")
+		var mountPoint, fstype, flags string
+
+		if strings.Contains(line, " on ") && strings.Contains(line, " type ") {
+			// mount command format: "rootfs on / type rootfs (rw,relatime)"
+			fields := strings.Fields(line)
+			if len(fields) < 6 {
+				continue
 			}
+			// fields: [device, "on", mountpoint, "type", fstype, "(flags)"]
+			mountPoint = fields[2]
+			fstype = fields[4]
+			flags = strings.TrimPrefix(fields[5], "(")
+			flags = strings.TrimSuffix(flags, ")")
+		} else {
+			// /proc/mounts format: "device mountpoint fstype options ..."
+			fields := strings.Fields(line)
+			if len(fields) < 3 {
+				continue
+			}
+			mountPoint = fields[1]
+			fstype = fields[2]
+			if len(fields) >= 4 {
+				flags = fields[3]
+			}
+		}
+
+		if _, ok := interesting[mountPoint]; ok {
 			if flags != "" {
 				result = append(result, fmt.Sprintf("%s : %s,%s", mountPoint, fstype, flags))
 			} else {
