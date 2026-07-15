@@ -164,7 +164,3 @@ func newTelnetClient(rm *scout.RemoteFile, verbose bool) (*telnet.TelnetClient, 
 	return tc, nil
 }
 
-// runPhase2 is a stub — will be replaced in Task 5 (phase2.go).
-func runPhase2(fp *Fingerprint, rm *scout.RemoteFile, verbose bool) error {
-	return nil
-}
