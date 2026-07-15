@@ -407,17 +407,14 @@ func (s *Scout) Pull(localPath string) error {
 }
 
 // NewPull creates a Scout configured for downloading a file from a remote device.
-func NewPull(remoteSource, localPath string, verboseFlag bool) (*Scout, error) {
-	remote, err := ParseRemoteFileName(remoteSource)
+func NewPull(target string, verboseFlag bool) (*Scout, error) {
+	remote, err := ParseRemoteFileName(target)
 	if err != nil {
 		return nil, errorx.Decorate(err, "failed to parse remote address")
 	}
 
-	s := &Scout{
-		localFile: localPath,
-		remote:    remote,
-		verbose:   verboseFlag,
-	}
-
-	return s, nil
+	return &Scout{
+		remote:  remote,
+		verbose: verboseFlag,
+	}, nil
 }

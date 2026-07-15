@@ -1,13 +1,12 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/krabiswabbie/busyscout/internal/detect"
 	"github.com/krabiswabbie/busyscout/internal/scout"
-	"k8s.io/klog/v2"
 )
 
 var Version = "dev"
@@ -15,77 +14,122 @@ var Version = "dev"
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
-		os.Exit(0)
+		os.Exit(1)
 	}
 
-	subcmd := os.Args[1]
-	switch subcmd {
+	cmd := os.Args[1]
+
+	// Handle --help and --version
+	switch cmd {
+	case "--help", "-h":
+		printUsage()
+		return
+	case "--version", "-v":
+		fmt.Println("busyscout version", Version)
+		return
+	}
+
+	// Parse command-specific flags
+	switch cmd {
 	case "push":
-		cmdPush(os.Args[2:])
+		cmdPush()
+	case "pull":
+		cmdPull()
 	case "detect":
-		cmdDetect(os.Args[2:])
+		cmdDetect()
 	default:
-		// Backward compat: if first arg looks like a file, treat as push
-		if len(os.Args) >= 3 && !strings.HasPrefix(os.Args[1], "-") {
-			cmdPush(os.Args[1:])
-		} else {
-			printUsage()
-			os.Exit(0)
-		}
+		// Legacy format: busyscout <file> <remote> [--verbose]
+		cmdLegacyPush()
 	}
 }
 
 func printUsage() {
-	fmt.Printf("busyscout %s\n", Version)
-	fmt.Println("Usage:")
-	fmt.Println("  busyscout push   <local_file> <remote_target> [--verbose]")
-	fmt.Println("  busyscout detect <remote_target> [--verbose]")
-	fmt.Println()
-	fmt.Println("Remote target format: user:pass@host:port:/path")
-	fmt.Println("Examples:")
-	fmt.Println("  busyscout push firmware.bin admin:12345@192.168.1.100:/tmp")
-	fmt.Println("  busyscout detect admin:12345@192.168.1.100:/tmp --verbose")
+	fmt.Println(`BusyScout — push/pull files to embedded devices (IP cameras, NVR) via telnet.
+
+Usage:
+  busyscout push <local> user:pass@host[:port]/path [--verbose]
+  busyscout pull user:pass@host[:port]/path <local> [--verbose]
+  busyscout detect user:pass@host[:port]/path [--verbose]
+
+Mode selection is automatic:
+  Same subnet → fast TCP (~6-8 KB loader + line-speed transfer)
+  Different subnet → printf over telnet (slower but NAT-safe)`)
 }
 
-func cmdPush(args []string) {
-	argsCount := len(args)
-	if argsCount < 2 || argsCount > 3 || argsCount == 3 && args[2] != "--verbose" {
-		fmt.Printf("busyscout %s\n", Version)
-		fmt.Println("Usage:   busyscout push <local_file> <remote_target> [--verbose]")
-		fmt.Println("Example: busyscout push ipwiz.zip root:12345@192.168.10.18:/tmp")
-		os.Exit(0)
+func cmdPush() {
+	args := flag.NewFlagSet("push", flag.ExitOnError)
+	verbose := args.Bool("verbose", false, "verbose output")
+	args.Parse(os.Args[2:])
+
+	if args.NArg() < 2 {
+		fmt.Println("Usage: busyscout push <local> user:pass@host[:port]/path [--verbose]")
+		os.Exit(1)
 	}
 
-	sourceFile := args[0]
-	targetFile := args[1]
-	verboseFlag := argsCount == 3 && args[2] == "--verbose"
-
-	s, errNew := scout.New(sourceFile, targetFile, verboseFlag)
-	if errNew != nil {
-		klog.Fatal(errNew)
+	s, err := scout.New(args.Arg(0), args.Arg(1), *verbose)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 
-	if errPush := s.Push(); errPush != nil {
-		klog.Fatal(errPush)
+	if err := s.Push(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
-func cmdDetect(args []string) {
-	argsCount := len(args)
-	if argsCount < 1 || argsCount > 2 || argsCount == 2 && args[1] != "--verbose" {
-		fmt.Printf("busyscout %s\n", Version)
-		fmt.Println("Usage:   busyscout detect <remote_target> [--verbose]")
-		fmt.Println("Example: busyscout detect admin:12345@192.168.10.18:/tmp")
-		os.Exit(0)
+func cmdPull() {
+	args := flag.NewFlagSet("pull", flag.ExitOnError)
+	verbose := args.Bool("verbose", false, "verbose output")
+	args.Parse(os.Args[2:])
+
+	if args.NArg() < 2 {
+		fmt.Println("Usage: busyscout pull user:pass@host[:port]/path <local> [--verbose]")
+		os.Exit(1)
 	}
 
-	target := args[0]
-	verboseFlag := argsCount == 2 && args[1] == "--verbose"
+	s, err := scout.NewPull(args.Arg(0), *verbose)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 
-	fp, errDetect := detect.Detect(target, verboseFlag)
+	if err := s.Pull(args.Arg(1)); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func cmdDetect() {
+	args := flag.NewFlagSet("detect", flag.ExitOnError)
+	verbose := args.Bool("verbose", false, "verbose output")
+	args.Parse(os.Args[2:])
+
+	if args.NArg() < 1 {
+		fmt.Println("Usage: busyscout detect user:pass@host[:port]/path [--verbose]")
+		os.Exit(1)
+	}
+
+	target := args.Arg(0)
+
+	fp, errDetect := detect.Detect(target, *verbose)
 	if errDetect != nil {
-		klog.Fatal(errDetect)
+		fmt.Fprintf(os.Stderr, "error: %v\n", errDetect)
+		os.Exit(1)
 	}
 
 	fmt.Print(fp.Format())
+}
+
+func cmdLegacyPush() {
+	// Legacy: busyscout <file> <remote> [--verbose]
+	s, err := scout.New(os.Args[1], os.Args[2], len(os.Args) > 3 && os.Args[3] == "--verbose")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if err := s.Push(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 }
