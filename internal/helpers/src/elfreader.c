@@ -120,6 +120,17 @@ int main(int argc, char **argv) {
     snprintf(machine_str, sizeof(machine_str), "%u", machine);
     print_field("machine", machine_str);
 
+    // ARM float ABI from e_flags (works even on stripped binaries without section headers).
+    // EF_ARM_ABI_FLOAT_HARD = 0x400, EF_ARM_ABI_FLOAT_SOFT = 0x200.
+    if (machine == 40 && buf[4] == 1) {
+        unsigned int e_flags = *(unsigned int *)(buf + 36);
+        if (e_flags & 0x400) {
+            print_field("float_abi", "hard");
+        } else if (e_flags & 0x200) {
+            print_field("float_abi", "soft");
+        }
+    }
+
     // ARM attributes section: parse section headers for .ARM.attributes
     // We need e_shoff to find section header table
     unsigned long shoff;
