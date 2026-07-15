@@ -15,6 +15,9 @@ ARCHITECTURES := amd64
 
 all: clean test build
 
+local:
+	$(GOBUILD) -o $(BINARY_NAME) .
+
 test:
 	$(GOTEST) -v ./...
 
@@ -141,5 +144,5 @@ test-integration-detect:
 	go run . detect user:password@127.0.0.1:2323
 	docker compose -f tests/docker-compose.yaml down
 
-.PHONY: all test clean build helpers helpers-clean test-integration-detect \
+.PHONY: all local test clean build helpers helpers-clean test-integration-detect \
         helpers-arm helpers-aarch64 helpers-mipsel helpers-mips helpers-x86 helpers-x86_64
