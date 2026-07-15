@@ -18,9 +18,14 @@ func probeOS(tc *telnet.TelnetClient, fp *Fingerprint) {
 		fp.BusyBoxVersion = parseBusyBoxVersion(string(out))
 	}
 
-	// Device-tree model (supplements cpuinfo Hardware)
+	// Device-tree model (supplements cpuinfo Hardware).
+	// DT properties are null-terminated — cut at first \x00.
 	if out, err := tc.Execute("cat", "/proc/device-tree/model"); err == nil && len(out) > 0 {
-		model := strings.TrimSpace(string(out))
+		model := string(out)
+		if idx := strings.IndexByte(model, 0); idx >= 0 {
+			model = model[:idx]
+		}
+		model = strings.TrimSpace(model)
 		if model != "" {
 			if fp.DeviceModel != "" {
 				fp.DeviceModel += " (" + model + ")"
@@ -31,7 +36,7 @@ func probeOS(tc *telnet.TelnetClient, fp *Fingerprint) {
 	}
 
 	// Glibc version via .so execution
-	if out, err := tc.Execute("sh", "-c", "/lib/libc.so.6 2>&1 || true"); err == nil && len(out) > 0 {
+	if out, err := tc.Execute("sh -c '/lib/libc.so.6 2>&1 || true'"); err == nil && len(out) > 0 {
 		ver := parseGlibcVersion(string(out))
 		if ver != "" {
 			if fp.LibcVersion == "" || fp.LibcVersion == "glibc" {
@@ -46,13 +51,13 @@ func probeOS(tc *telnet.TelnetClient, fp *Fingerprint) {
 	}
 
 	// df — use -h for human-readable; fallback to raw 1K-blocks if -h unsupported
-	if out, err := tc.Execute("sh", "-c", "df -h / 2>/dev/null || df -h 2>/dev/null"); err == nil && len(out) > 0 {
+	if out, err := tc.Execute("sh -c 'df -h / 2>/dev/null || df -h 2>/dev/null'"); err == nil && len(out) > 0 {
 		fp.RootFSUsage = parseDFRoot(string(out))
 	}
 
 	// mounts — try /proc/mounts first (correct space-separated format),
 	// fall back to `mount` (different format: "device on / type fstype (flags)")
-	if out, err := tc.Execute("sh", "-c", "cat /proc/mounts 2>/dev/null || mount"); err == nil && len(out) > 0 {
+	if out, err := tc.Execute("sh -c 'cat /proc/mounts 2>/dev/null || mount'"); err == nil && len(out) > 0 {
 		fp.Mounts = parseMountsFiltered(string(out))
 	}
 
@@ -63,8 +68,7 @@ func probeOS(tc *telnet.TelnetClient, fp *Fingerprint) {
 
 	// Net tools
 	if out, err := tc.Execute(
-		"sh", "-c",
-		"ls /usr/bin/curl /usr/bin/wget /bin/nc /usr/sbin/nc /usr/bin/openssl /usr/bin/tftp /usr/bin/ftpget /usr/bin/ncat 2>/dev/null",
+		"sh -c 'ls /usr/bin/curl /usr/bin/wget /bin/nc /usr/sbin/nc /usr/bin/openssl /usr/bin/tftp /usr/bin/ftpget /usr/bin/ncat 2>/dev/null'",
 	); err == nil && len(out) > 0 {
 		fp.NetTools = parseNetTools(string(out))
 	}
@@ -163,6 +167,9 @@ func formatSize1K(raw string) string {
 	var blocks int64
 	if _, err := fmt.Sscanf(raw, "%d", &blocks); err != nil {
 		return raw // return as-is on parse failure
+	}
+	if blocks == 0 {
+		return "0"
 	}
 	bytes := blocks * 1024
 	switch {
