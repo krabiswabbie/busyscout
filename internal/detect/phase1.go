@@ -87,6 +87,9 @@ func runPhase1(fp *Fingerprint, rm *scout.RemoteFile, verbose bool) error {
 		parseProcVersion(string(versionOut), fp)
 	}
 
+	// --- OS probe (best-effort, supplements architecture data) ---
+	probeOS(tc, fp)
+
 	// Endianness default (ARM + AArch64 + x86 are LE; MIPS depends on cpuinfo)
 	if fp.Endianness == "" {
 		switch fp.ISA {
@@ -209,10 +212,13 @@ func parseLibc(output string, fp *Fingerprint) {
 	switch {
 	case strings.Contains(output, "ld-musl"):
 		fp.Libc = "musl"
+		fp.LibcVersion = "musl"
 	case strings.Contains(output, "ld-uClibc"):
 		fp.Libc = extractUclibcVersion(output)
+		fp.LibcVersion = fp.Libc
 	case strings.Contains(output, "libc.so.6") || strings.Contains(output, "ld-linux"):
 		fp.Libc = "glibc"
+		fp.LibcVersion = "glibc"
 	}
 }
 
