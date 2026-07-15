@@ -134,5 +134,11 @@ helpers-clean:
 	touch $(HELPER_BIN_DIR)/elfreader-x86-glibc
 	touch $(HELPER_BIN_DIR)/elfreader-x86_64-glibc
 
-.PHONY: all test clean build helpers helpers-clean \
+test-integration-detect:
+	docker compose -f tests/docker-compose.yaml up -d
+	sleep 2
+	go run . detect user:password@127.0.0.1:2323:/tmp
+	docker compose -f tests/docker-compose.yaml down
+
+.PHONY: all test clean build helpers helpers-clean test-integration-detect \
         helpers-arm helpers-aarch64 helpers-mipsel helpers-mips helpers-x86 helpers-x86_64

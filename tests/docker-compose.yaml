@@ -2,7 +2,7 @@ services:
   telnet-server:
     image: wistic/telnetd
     ports:
-      - "23:23"
+      - "2323:23"
     networks:
       - telnet-net
 
@@ -10,5 +10,5 @@ networks:
   telnet-net:
     enable_ipv6: true
 
-## telnet ::1
+## telnet localhost 2323
 ## user:password
