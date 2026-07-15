@@ -9,7 +9,79 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <elf.h>
+
+// Minimal ELF definitions — avoid <elf.h> for cross-platform compilation
+#define EI_NIDENT 16
+
+typedef unsigned short Elf32_Half;
+typedef unsigned int   Elf32_Word;
+typedef unsigned int   Elf32_Addr;
+typedef unsigned int   Elf32_Off;
+
+typedef unsigned short Elf64_Half;
+typedef unsigned int   Elf64_Word;
+typedef unsigned long  Elf64_Addr;
+typedef unsigned long  Elf64_Off;
+
+typedef struct {
+    unsigned char e_ident[EI_NIDENT];
+    Elf32_Half    e_type;
+    Elf32_Half    e_machine;
+    Elf32_Word    e_version;
+    Elf32_Addr    e_entry;
+    Elf32_Off     e_phoff;
+    Elf32_Off     e_shoff;
+    Elf32_Word    e_flags;
+    Elf32_Half    e_ehsize;
+    Elf32_Half    e_phentsize;
+    Elf32_Half    e_phnum;
+    Elf32_Half    e_shentsize;
+    Elf32_Half    e_shnum;
+    Elf32_Half    e_shstrndx;
+} Elf32_Ehdr;
+
+typedef struct {
+    unsigned char e_ident[EI_NIDENT];
+    Elf64_Half    e_type;
+    Elf64_Half    e_machine;
+    Elf64_Word    e_version;
+    Elf64_Addr    e_entry;
+    Elf64_Off     e_phoff;
+    Elf64_Off     e_shoff;
+    Elf64_Word    e_flags;
+    Elf64_Half    e_ehsize;
+    Elf64_Half    e_phentsize;
+    Elf64_Half    e_phnum;
+    Elf64_Half    e_shentsize;
+    Elf64_Half    e_shnum;
+    Elf64_Half    e_shstrndx;
+} Elf64_Ehdr;
+
+typedef struct {
+    Elf32_Word sh_name;
+    Elf32_Word sh_type;
+    Elf32_Word sh_flags;
+    Elf32_Addr sh_addr;
+    Elf32_Off  sh_offset;
+    Elf32_Word sh_size;
+    Elf32_Word sh_link;
+    Elf32_Word sh_info;
+    Elf32_Word sh_addralign;
+    Elf32_Word sh_entsize;
+} Elf32_Shdr;
+
+typedef struct {
+    Elf64_Word  sh_name;
+    Elf64_Word  sh_type;
+    Elf64_Off   sh_flags;
+    Elf64_Addr  sh_addr;
+    Elf64_Off   sh_offset;
+    Elf64_Off   sh_size;
+    Elf64_Word  sh_link;
+    Elf64_Word  sh_info;
+    Elf64_Off   sh_addralign;
+    Elf64_Off   sh_entsize;
+} Elf64_Shdr;
 
 static void print_field(const char *key, const char *value) {
     printf("%s=%s\n", key, value);
@@ -25,12 +97,12 @@ int main(int argc, char **argv) {
     // Read first 64 bytes (covers both 32-bit and 64-bit ELF headers)
     unsigned char buf[64];
     ssize_t n = read(fd, buf, sizeof(buf));
-    close(fd);
-    if (n < 20) { fprintf(stderr, "short read\n"); return 1; }
+    if (n < 20) { fprintf(stderr, "short read\n"); close(fd); return 1; }
 
     // Check ELF magic
     if (buf[0] != 0x7f || buf[1] != 'E' || buf[2] != 'L' || buf[3] != 'F') {
         fprintf(stderr, "not an ELF file\n");
+        close(fd);
         return 1;
     }
 
@@ -146,5 +218,6 @@ int main(int argc, char **argv) {
         break;
     }
 
+    close(fd);
     return 0;
 }
