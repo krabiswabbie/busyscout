@@ -28,4 +28,21 @@ build:
 		$(foreach GOARCH, $(ARCHITECTURES),\
 			$(shell export GOOS=$(GOOS); export GOARCH=$(GOARCH); $(GOBUILD) -ldflags '-s -X main.Version=$(VERSION)' -o $(RELEASE_DIR)/$(BINARY_NAME)-$(GOOS)-$(GOARCH))))
 
-.PHONY: all test clean build
+# Helper cross-compilation
+HELPER_SRC=internal/helpers/src/elfreader.c
+HELPER_BIN_DIR=internal/helpers/bin
+
+helpers:
+	mkdir -p $(HELPER_BIN_DIR)
+	arm-linux-gnueabi-gcc -static -s -Os -o $(HELPER_BIN_DIR)/elfreader-arm $(HELPER_SRC)
+	aarch64-linux-gnu-gcc -static -s -Os -o $(HELPER_BIN_DIR)/elfreader-aarch64 $(HELPER_SRC)
+	mipsel-linux-gnu-gcc -static -s -Os -o $(HELPER_BIN_DIR)/elfreader-mipsel $(HELPER_SRC)
+	mips-linux-gnu-gcc -static -s -Os -o $(HELPER_BIN_DIR)/elfreader-mips $(HELPER_SRC)
+	gcc -static -s -Os -o $(HELPER_BIN_DIR)/elfreader-x86 $(HELPER_SRC)
+	gcc -static -s -Os -o $(HELPER_BIN_DIR)/elfreader-x86_64 $(HELPER_SRC)
+	@echo "Helpers built successfully"
+
+helpers-clean:
+	rm -f $(HELPER_BIN_DIR)/elfreader-*
+
+.PHONY: all test clean build helpers helpers-clean
