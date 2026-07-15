@@ -3,6 +3,7 @@ services:
     image: wistic/telnetd
     ports:
       - "2323:23"
+      - "9999:9999"  # TCP port for fast xfer test
     networks:
       - telnet-net
 
