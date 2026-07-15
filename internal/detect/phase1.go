@@ -371,12 +371,12 @@ func parseReadelfOutput(output string, fp *Fingerprint) {
 func parseProcVersion(output string, fp *Fingerprint) {
 	lower := strings.ToLower(output)
 	switch {
-	case strings.Contains(lower, "arm"):
-		fp.ISA = "arm"
-		fp.WordSize = 32
 	case strings.Contains(lower, "aarch64"):
 		fp.ISA = "aarch64"
 		fp.WordSize = 64
+	case strings.Contains(lower, "arm"):
+		fp.ISA = "arm"
+		fp.WordSize = 32
 	case strings.Contains(lower, "mips"):
 		fp.ISA = "mips"
 		fp.WordSize = 32
