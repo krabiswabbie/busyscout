@@ -80,21 +80,72 @@ func (f *Fingerprint) Format() string {
 		b.WriteString("Float ABI:        [uncertain]\n")
 	}
 
-	if f.Libc != "" {
-		b.WriteString(fmt.Sprintf("libc:             %s\n", f.Libc))
+	libcLabel := f.LibcVersion
+	if libcLabel == "" {
+		libcLabel = f.Libc
+	}
+	if libcLabel != "" {
+		b.WriteString(fmt.Sprintf("libc:             %s\n", libcLabel))
 	} else {
 		b.WriteString("libc:             [uncertain]\n")
 	}
 
 	if f.SoCHint != "" {
-		b.WriteString(fmt.Sprintf("SoC hint:         %s\n", f.SoCHint))
+		b.WriteString(fmt.Sprintf("SoC:              %s\n", f.SoCHint))
 	}
 
 	if f.ToolchainHint != "" {
-		b.WriteString(fmt.Sprintf("Toolchain hint:   %s\n", f.ToolchainHint))
+		b.WriteString(fmt.Sprintf("Toolchain:        %s\n", f.ToolchainHint))
 	}
 
+	// OS Profile section
+	f.writeOSProfile(&b)
+
 	return b.String()
+}
+
+// writeOSProfile appends the OS Profile section if any OS fields are populated.
+func (f *Fingerprint) writeOSProfile(b *strings.Builder) {
+	hasOS := f.KernelVersion != "" || f.KernelBuild != "" || f.BusyBoxVersion != "" ||
+		f.DeviceModel != "" || f.Uptime != "" || f.TotalRAM != "" ||
+		f.RootFSUsage != "" || len(f.Mounts) > 0 || len(f.NetTools) > 0
+
+	if !hasOS {
+		return
+	}
+
+	b.WriteString("\nOS Profile:\n")
+
+	if f.KernelVersion != "" {
+		b.WriteString(fmt.Sprintf("  Kernel:    %s\n", f.KernelVersion))
+	}
+	if f.KernelBuild != "" {
+		b.WriteString(fmt.Sprintf("  Build:     %s\n", f.KernelBuild))
+	}
+	if f.BusyBoxVersion != "" {
+		b.WriteString(fmt.Sprintf("  BusyBox:   %s\n", f.BusyBoxVersion))
+	}
+	if f.DeviceModel != "" {
+		b.WriteString(fmt.Sprintf("  Device:    %s\n", f.DeviceModel))
+	}
+	if f.Uptime != "" {
+		b.WriteString(fmt.Sprintf("  Uptime:    %s\n", f.Uptime))
+	}
+	if f.TotalRAM != "" {
+		b.WriteString(fmt.Sprintf("  RAM:       %s\n", f.TotalRAM))
+	}
+	if f.RootFSUsage != "" {
+		b.WriteString(fmt.Sprintf("  Disk (/):  %s\n", f.RootFSUsage))
+	}
+	if len(f.Mounts) > 0 {
+		b.WriteString("  Mounts:\n")
+		for _, m := range f.Mounts {
+			b.WriteString(fmt.Sprintf("    %s\n", m))
+		}
+	}
+	if len(f.NetTools) > 0 {
+		b.WriteString(fmt.Sprintf("  Tools:     %s\n", strings.Join(f.NetTools, ", ")))
+	}
 }
 
 func (f *Fingerprint) archLabel() string {
