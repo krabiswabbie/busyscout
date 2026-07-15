@@ -21,7 +21,7 @@ func runPhase2(fp *Fingerprint, rm *scout.RemoteFile, verbose bool) error {
 		err        error
 	)
 	if fp.ISA == "mips" && fp.Endianness == "little" {
-		helperData, err = helpers.HelperForISALE("mipsel")
+		helperData, err = helpers.HelperForISALE(fp.ISA)
 	} else {
 		helperData, err = helpers.HelperForISA(fp.ISA)
 	}
