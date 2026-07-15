@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"time"
 )
 
 const (
@@ -15,21 +16,24 @@ const (
 	typeError byte = 0x04
 )
 
-// StartListener binds a TCP listener on an ephemeral port (port 0).
+// StartListener binds a TCP listener on an ephemeral port (port 0) on all interfaces.
+// Binding to ":0" (all interfaces) allows connections from both localhost (127.0.0.1)
+// and remote devices (LAN IP), which is required for device fileloader connections.
 func StartListener() (int, net.Listener, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", ":0")
 	if err != nil {
-		// Fallback: try all interfaces
-		ln, err = net.Listen("tcp", ":0")
-		if err != nil {
-			return 0, nil, err
-		}
+		return 0, nil, err
 	}
 	return ln.Addr().(*net.TCPAddr).Port, ln, nil
 }
 
 // AcceptAndPush accepts one connection and sends a PUSH frame with the file contents.
 func AcceptAndPush(ln net.Listener, localPath string) error {
+	// Set 5-second deadline for the device fileloader to connect
+	if tl, ok := ln.(*net.TCPListener); ok {
+		tl.SetDeadline(time.Now().Add(5 * time.Second))
+	}
+
 	conn, err := ln.Accept()
 	if err != nil {
 		return fmt.Errorf("accept: %w", err)
@@ -72,6 +76,11 @@ func AcceptAndPush(ln net.Listener, localPath string) error {
 // The fileloader on the device sends: TYPE_PULL (announcement) + TYPE_DATA (file contents).
 // localPath: where to write the received file on BusyScout host.
 func AcceptAndPull(ln net.Listener, localPath string) error {
+	// Set 5-second deadline for the device fileloader to connect
+	if tl, ok := ln.(*net.TCPListener); ok {
+		tl.SetDeadline(time.Now().Add(5 * time.Second))
+	}
+
 	conn, err := ln.Accept()
 	if err != nil {
 		return fmt.Errorf("accept: %w", err)
