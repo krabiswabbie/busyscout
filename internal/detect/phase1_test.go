@@ -149,14 +149,49 @@ func TestParseFileOutput(t *testing.T) {
 }
 
 func TestParseODOutput(t *testing.T) {
+	// Test basic ELF parsing (ARM 32-bit LE, 40 bytes: header + zero padding)
+	odARM := "7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 02 00 28 00" +
+		" 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+
 	fp := &Fingerprint{Endianness: "little"}
-	parseODOutput("7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 02 00 28 00", fp)
+	parseODOutput(odARM, fp)
 
 	if fp.WordSize != 32 {
 		t.Errorf("WordSize = %d, want 32", fp.WordSize)
 	}
 	if fp.ISA != "arm" {
 		t.Errorf("ISA = %q, want arm", fp.ISA)
+	}
+}
+
+func TestParseODOutputFloatABI(t *testing.T) {
+	// ARM 32-bit LE with EF_ARM_ABI_FLOAT_HARD (0x400) in e_flags byte 37
+	// Byte 37 = 0x04 (bit 2 set)
+	odHard := "7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 02 00 28 00" +
+		" 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 04 00 00"
+
+	fp := &Fingerprint{Endianness: "little"}
+	parseODOutput(odHard, fp)
+	if fp.FloatABI != "hard" {
+		t.Errorf("FloatABI = %q, want hard", fp.FloatABI)
+	}
+
+	// ARM 32-bit LE with EF_ARM_ABI_FLOAT_SOFT (0x200) in e_flags byte 37
+	// Byte 37 = 0x02 (bit 1 set)
+	odSoft := "7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 02 00 28 00" +
+		" 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 00 00"
+
+	fp2 := &Fingerprint{Endianness: "little"}
+	parseODOutput(odSoft, fp2)
+	if fp2.FloatABI != "soft" {
+		t.Errorf("FloatABI = %q, want soft", fp2.FloatABI)
+	}
+
+	// Not enough fields (only 20 bytes) — should be skipped
+	fp3 := &Fingerprint{Endianness: "little"}
+	parseODOutput("7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 02 00 28 00", fp3)
+	if fp3.WordSize != 0 {
+		t.Errorf("WordSize = %d, want 0 (skipped)", fp3.WordSize)
 	}
 }
 

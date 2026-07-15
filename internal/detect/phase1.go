@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -50,7 +51,7 @@ func runPhase1(fp *Fingerprint, rm *scout.RemoteFile, verbose bool) error {
 
 	// Optional tools
 	fileOut, _ := tc.Execute("file", "/bin/busybox")
-	odOut, _ := tc.Execute("sh -c 'od -An -t x1 -N20 /bin/busybox 2>/dev/null'")
+	odOut, _ := tc.Execute("sh -c 'od -An -t x1 -N40 /bin/busybox 2>/dev/null'")
 	readelfOut, _ := tc.Execute("sh -c 'readelf -A /bin/busybox 2>/dev/null | grep -E \"Tag_CPU_arch|Tag_ABI_VFP|Tag_FP_arch\"'")
 
 	// --- Parse ---
@@ -317,11 +318,18 @@ func parseFileOutput(output string, fp *Fingerprint) {
 	}
 }
 
-// parseODOutput parses the hex dump of the first 20 bytes of an ELF file.
+// parseODOutput parses the hex dump of the first 40 bytes of an ELF file.
+// Reads class, endian, e_machine, and ARM e_flags for float ABI detection.
+//
+// e_flags (bytes 36-39 in 32-bit ELF) encodes ARM ABI:
+//
+//	EF_ARM_ABI_FLOAT_HARD = 0x400 (byte 37, bit 2)
+//	EF_ARM_ABI_FLOAT_SOFT = 0x200 (byte 37, bit 1)
+//
 // Example: " 7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 02 00 28 00"
 func parseODOutput(output string, fp *Fingerprint) {
 	fields := strings.Fields(strings.TrimSpace(output))
-	if len(fields) < 20 {
+	if len(fields) < 40 {
 		return
 	}
 
@@ -364,6 +372,19 @@ func parseODOutput(output string, fp *Fingerprint) {
 			fp.ISA = "mips"
 		case "00b7":
 			fp.ISA = "aarch64"
+		}
+	}
+
+	// ARM float ABI from e_flags (bytes 36-39), only for 32-bit ARM LE.
+	// EF_ARM_ABI_FLOAT_HARD = 0x400 → byte 37 bit 2
+	// EF_ARM_ABI_FLOAT_SOFT = 0x200 → byte 37 bit 1
+	if fp.ISA == "arm" && fp.FloatABI == "" && fp.Endianness == "little" {
+		var flagsByte byte
+		fmt.Sscanf(fields[37], "%x", &flagsByte)
+		if flagsByte&0x04 != 0 {
+			fp.FloatABI = "hard"
+		} else if flagsByte&0x02 != 0 {
+			fp.FloatABI = "soft"
 		}
 	}
 }
