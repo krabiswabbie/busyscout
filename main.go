@@ -39,6 +39,10 @@ func main() {
 		cmdDetect()
 	default:
 		// Legacy format: busyscout <file> <remote> [--verbose]
+		if len(os.Args) < 3 {
+			printUsage()
+			os.Exit(1)
+		}
 		cmdLegacyPush()
 	}
 }
