@@ -258,7 +258,7 @@ func parseUptimeSeconds(output string) string {
 	if days > 0 {
 		return fmt.Sprintf("%dd %02d:%02d", days, hours, minutes)
 	}
-	return fmt.Sprintf("%d:%02d", hours, minutes)
+	return fmt.Sprintf("%02d:%02d", hours, minutes)
 }
 
 // parseNetTools extracts basenames of existing network tools from ls output.

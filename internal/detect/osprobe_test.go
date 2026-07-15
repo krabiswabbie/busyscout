@@ -149,7 +149,7 @@ func TestParseUptimeSeconds(t *testing.T) {
 		{
 			name:   "under 1 day",
 			input:  "4500.00 2000.00",
-			expect: "1:15",
+			expect: "01:15",
 		},
 		{
 			name:   "empty",
