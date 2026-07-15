@@ -15,15 +15,15 @@ func runPhase2(fp *Fingerprint, rm *scout.RemoteFile, verbose bool) error {
 		return nil
 	}
 
-	// Select helper: MIPS little-endian uses mipsel helper
+	// Select helper: MIPS little-endian uses mipsel helper; libc-aware
 	var (
 		helperData []byte
 		err        error
 	)
 	if fp.ISA == "mips" && fp.Endianness == "little" {
-		helperData, err = helpers.HelperForISALE(fp.ISA)
+		helperData, err = helpers.HelperForISALE(fp.ISA, fp.Libc)
 	} else {
-		helperData, err = helpers.HelperForISA(fp.ISA)
+		helperData, err = helpers.HelperForISA(fp.ISA, fp.Libc)
 	}
 	if err != nil {
 		return errorx.Decorate(err, "no helper available for detected ISA")
