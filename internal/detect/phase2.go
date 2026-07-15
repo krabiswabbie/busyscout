@@ -37,7 +37,7 @@ func runPhase2(fp *Fingerprint, rm *scout.RemoteFile, verbose bool) error {
 	defer tc.Close()
 
 	// Upload helper binary
-	if err := scout.UploadData(tc, helperData, helperRemotePath); err != nil {
+	if err := helpers.UploadData(tc, helperData, helperRemotePath); err != nil {
 		return errorx.Decorate(err, "failed to upload helper binary")
 	}
 

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/joomcode/errorx"
+	"github.com/krabiswabbie/busyscout/internal/helpers"
 	"github.com/krabiswabbie/busyscout/internal/telnet"
+	"github.com/krabiswabbie/busyscout/internal/xfer"
 	"github.com/schollz/progressbar/v3"
 	"os"
 	"path/filepath"
@@ -27,6 +29,8 @@ type Scout struct {
 	remote    *RemoteFile
 	verbose   bool
 	bar       *progressbar.ProgressBar
+	isa       string // cached ISA from light detection
+	libc      string // cached libc from light detection
 }
 
 func New(source, target string, verboseFlag bool) (*Scout, error) {
@@ -74,7 +78,84 @@ func (s *Scout) newClient() (*telnet.TelnetClient, error) {
 	return tc, nil
 }
 
+// detectISALight runs a quick ISA+libc detection on the device.
+func (s *Scout) detectISALight() error {
+	if s.isa != "" {
+		return nil // already cached
+	}
+
+	tc, err := s.newClient()
+	if err != nil {
+		return err
+	}
+	defer tc.Close()
+
+	// uname -m → ISA
+	stdout, err := tc.Execute("uname", "-m")
+	if err != nil {
+		return errorx.Decorate(err, "uname failed")
+	}
+	s.isa = parseUnameMachine(string(stdout))
+
+	// ls libc → libc family
+	stdout, err = tc.Execute("sh", "-c", "ls -l /lib/libc.so* /lib/ld-*.so* 2>/dev/null || true")
+	if err == nil {
+		s.libc = parseLibcFamily(string(stdout))
+	}
+
+	return nil
+}
+
+// parseUnameMachine extracts ISA from uname -m output.
+func parseUnameMachine(output string) string {
+	o := strings.TrimSpace(strings.ToLower(output))
+	switch {
+	case strings.HasPrefix(o, "armv"):
+		return "arm"
+	case strings.HasPrefix(o, "aarch64"):
+		return "aarch64"
+	case strings.HasPrefix(o, "mips"):
+		return "mips"
+	case o == "i386" || o == "i486" || o == "i586" || o == "i686":
+		return "x86"
+	case o == "x86_64":
+		return "x86_64"
+	default:
+		return o
+	}
+}
+
+// parseLibcFamily detects libc family from ls output.
+func parseLibcFamily(output string) string {
+	o := strings.ToLower(output)
+	switch {
+	case strings.Contains(o, "uclibc"):
+		return "uclibc"
+	case strings.Contains(o, "musl"):
+		return "musl"
+	case strings.Contains(o, "glibc") || strings.Contains(o, "libc.so"):
+		return "glibc"
+	default:
+		return ""
+	}
+}
+
 func (s *Scout) Push() error {
+	// Detect same subnet
+	if xfer.IsSameSubnet(s.remote.Host) {
+		if err := s.detectISALight(); err != nil {
+			// Fall through to printf mode on detection failure
+		} else {
+			tc, err := s.newClient()
+			if err != nil {
+				return err
+			}
+			defer tc.Close()
+			return xfer.Push(tc, s.localFile, s.remote.Path, s.isa, s.libc, s.remote.Host)
+		}
+	}
+
+	// printf fallback
 	type jobDefinition struct {
 		fname string
 		data  []byte
@@ -183,7 +264,7 @@ func (s *Scout) sendChunk(data []byte, targetFileName string) (progress int, err
 	}
 	defer tc.Close()
 
-	if errSend := UploadData(tc, data, toUnixPath(targetFileName)); errSend != nil {
+	if errSend := helpers.UploadData(tc, data, toUnixPath(targetFileName)); errSend != nil {
 		return 0, errSend
 	}
 
@@ -298,4 +379,45 @@ func (s *Scout) checkIsRemoteDirectory(path string) (bool, error) {
 // toUnixPath converts a path to use forward slashes, regardless of platform
 func toUnixPath(path string) string {
 	return strings.ReplaceAll(path, "\\", "/")
+}
+
+// Pull downloads a file from the remote device.
+func (s *Scout) Pull(localPath string) error {
+	// Detect same subnet
+	if xfer.IsSameSubnet(s.remote.Host) {
+		if err := s.detectISALight(); err != nil {
+			// Fall through to printf mode
+		} else {
+			tc, err := s.newClient()
+			if err != nil {
+				return err
+			}
+			defer tc.Close()
+			return xfer.Pull(tc, s.remote.Path, localPath, s.isa, s.libc, s.remote.Host)
+		}
+	}
+
+	// printf fallback
+	tc, err := s.newClient()
+	if err != nil {
+		return err
+	}
+	defer tc.Close()
+	return PullViaPrintf(tc, s.remote.Path, localPath)
+}
+
+// NewPull creates a Scout configured for downloading a file from a remote device.
+func NewPull(remoteSource, localPath string, verboseFlag bool) (*Scout, error) {
+	remote, err := ParseRemoteFileName(remoteSource)
+	if err != nil {
+		return nil, errorx.Decorate(err, "failed to parse remote address")
+	}
+
+	s := &Scout{
+		localFile: localPath,
+		remote:    remote,
+		verbose:   verboseFlag,
+	}
+
+	return s, nil
 }

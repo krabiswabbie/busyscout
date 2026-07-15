@@ -1,7 +1,8 @@
-package scout
+package helpers
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/krabiswabbie/busyscout/internal/telnet"
 )
@@ -31,4 +32,13 @@ func UploadData(tc *telnet.TelnetClient, data []byte, targetFileName string) err
 	}
 
 	return nil
+}
+
+const (
+	lineSize = 128
+)
+
+// toUnixPath converts a path to use forward slashes, regardless of platform
+func toUnixPath(path string) string {
+	return strings.ReplaceAll(path, "\\", "/")
 }
