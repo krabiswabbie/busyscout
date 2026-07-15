@@ -7,6 +7,7 @@ import (
 	"github.com/joomcode/errorx"
 	"github.com/krabiswabbie/busyscout/internal/scout"
 	"github.com/krabiswabbie/busyscout/internal/telnet"
+	"k8s.io/klog/v2"
 )
 
 // Fingerprint holds all detected architecture properties.
@@ -47,9 +48,13 @@ func Detect(remote string, verbose bool) (*Fingerprint, error) {
 		return nil, errorx.Decorate(err, "phase 1 failed")
 	}
 
-	// Phase 2: Helper binary (only if needed)
-	if err := runPhase2(fp, rm, verbose); err != nil {
-		return nil, errorx.Decorate(err, "phase 2 failed")
+	// Phase 2: Helper binary (only if needed, best-effort)
+	if fp.needsPhase2() {
+		if err := runPhase2(fp, rm, verbose); err != nil {
+			// Best-effort: timeout or upload failure is not fatal.
+			// Phase 1 + OS probe already collected what they could.
+			klog.Warningf("phase 2 skipped: %v", err)
+		}
 	}
 
 	// Derive toolchain hint
