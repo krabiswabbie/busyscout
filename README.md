@@ -7,7 +7,7 @@ BusyScout is a utility for interacting with BusyBox-based devices (IP cameras, N
 - [Introduction](#introduction)
 - [Usage](#usage)
   - [Push — file upload](#push---file-upload)
-  - [Detect — architecture fingerprinting](#detect---architecture-fingerprinting)
+  - [Detect — architecture + OS fingerprinting](#detect---architecture--os-fingerprinting)
 - [Rationale](#rationale)
 - [Method of Transfer](#method-of-transfer)
 - [Architecture Detection](#architecture-detection)
@@ -21,7 +21,7 @@ BusyScout is a utility for interacting with BusyBox-based devices (IP cameras, N
 Budget IP cameras often run [BusyBox](https://busybox.net/) with telnet access but no SSH, FTP, or SCP. BusyScout fills this gap with two capabilities:
 
 1. **File upload** — transfer files using only `printf` and shell redirects, parallelized across multiple telnet sessions.
-2. **Architecture detection** — fingerprint the device's CPU, libc, endianness, and float ABI to select the correct cross-compiled binary.
+2. **Architecture + OS detection** — fingerprint the device's CPU, libc, endianness, float ABI, and OS profile (kernel, BusyBox, device model, memory, disk, network tools) to understand the target environment.
 
 ## Usage
 
@@ -51,28 +51,35 @@ busyscout push firmware.bin admin:12345@[2001:db8::1]:/tmp
 busyscout push firmware.bin admin:12345@192.168.1.100:/tmp --verbose
 ```
 
-For backward compatibility, the `push` subcommand can be omitted with exactly two positional arguments:
-
-```bash
-busyscout firmware.bin admin:12345@192.168.1.100:/tmp
-```
-
 ![](static/demo.gif)
 
-### Detect — architecture fingerprinting
+### Detect — architecture + OS fingerprinting
 
 ```bash
 busyscout detect <remote_target> [--verbose]
 ```
 
-Connects to the device and determines its CPU architecture, libc, endianness, and float ABI. Example output:
+Connects to the device and determines its CPU architecture, libc, endianness, float ABI, and OS profile (kernel version, BusyBox version, device model, memory, disk, mounts, available network tools, uptime). Example output:
 
 ```
 Architecture:     ARMv7 (32-bit, little-endian)
 Float ABI:        hard-float (VFP)
-libc:             uClibc 0.9.33
-SoC hint:         HiSilicon hi3516
-Toolchain hint:   armv7-linux-uclibceabihf
+libc:             uClibc 0.9.33.2
+SoC:              HiSilicon hi3516
+Toolchain:        armv7-linux-uclibceabihf
+
+OS Profile:
+  Kernel:    Linux 3.10.0-hi3516 (armv7l) #1 Tue Sep 15 10:00:00 CST 2020
+  Build:     gcc 4.8.3 (Hisilicon_v300) — Tue Sep 15 10:00:00 CST 2020
+  BusyBox:   v1.26.2
+  Device:    HiSilicon hi3516ev200
+  Uptime:    3d 12:45
+  RAM:       128 MB
+  Disk (/):  12M / 128M (9%)
+  Mounts:
+    /        squashfs (ro)
+    /tmp     tmpfs (rw)
+  Tools:     curl, wget, nc
 ```
 
 See [Architecture Detection](#architecture-detection) for details on how it works.
@@ -98,7 +105,7 @@ This method was initially described [here](https://unix.stackexchange.com/a/4178
 
 ## Architecture Detection
 
-The `detect` command uses a two-phase approach:
+The `detect` command uses a two-phase approach for CPU fingerprinting, plus an OS probe:
 
 **Phase 1 — Native commands.** Runs `uname -a`, `cat /proc/cpuinfo`, `ls /lib/libc*`, and probes for `file`, `od`, and `readelf` on the device. From these outputs it determines:
 
@@ -109,13 +116,16 @@ The `detect` command uses a two-phase approach:
 
 **Phase 2 — Helper upload.** If the device lacks `od`/`file`/`readelf`, BusyScout uploads a tiny (~5 KB) dynamically-linked ELF reader compiled for the detected ISA and libc. The helper reads `/bin/busybox`'s ELF header to confirm `e_machine` and extract ARM float ABI and CPU sub-architecture.
 
-The result is a toolchain hint (e.g. `armv7-linux-uclibceabihf`) that tells you which cross-compiler to use for that device.
+**OS Probe — Device profile.** After architecture detection, BusyScout collects OS-level information using standard `/proc` interfaces and BusyBox utilities: kernel version and build info, BusyBox version, device model (from cpuinfo and device-tree), RAM, disk usage, mount points, available network tools (curl, wget, nc, etc.), and uptime. All OS commands are best-effort — if a command fails, the field is simply left empty without affecting the architecture result.
+
+The result is a toolchain hint (e.g. `armv7-linux-uclibceabihf`) plus a full device profile.
 
 ## Advantages
 
 - Utilizes only widely available system functions, requiring no external commands or utilities.
 - Capable of transferring files in environments where other methods fail.
 - Architecture detection works even on stripped firmwares with no `file` or `od` commands.
+- OS profiling provides a full device picture (kernel, memory, disk, network tools) without additional tools.
 
 ## Disadvantages
 
