@@ -7,23 +7,26 @@
  * Protocol (all multi-byte ints are big-endian):
  *
  * PUSH (BusyScout → device):
- *   [1B type='P'] [4B namelen] [filename] [8B filesize] [data bytes...]
+ *   [1B type=0x01] [4B namelen] [filename] [8B filesize] [data bytes...]
  *
  * PULL (device → BusyScout):
- *   loader sends:  [1B type='G'] [4B namelen] [filename]
- *   BusyScout responds:
- *     success: [1B type='D'] [8B filesize] [data bytes...]
- *     error:   [1B type='E'] [4B msglen] [error message]
+ *   loader reads file from device disk, sends:
+ *     [1B type=0x02] [4B namelen] [filename]
+ *     [1B type=0x03] [8B filesize] [data bytes...]
+ *   On error (file not found):
+ *     [1B type=0x04] [4B msglen] [error message]
  */
 
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <sys/socket.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdint.h>
 
 #define TYPE_PUSH  0x01
 #define TYPE_PULL  0x02
