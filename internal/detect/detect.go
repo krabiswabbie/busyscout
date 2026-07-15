@@ -19,6 +19,18 @@ type Fingerprint struct {
 	Libc          string // "glibc", "uClibc", "musl", ""
 	SoCHint       string // e.g. "HiSilicon hi3516"
 	ToolchainHint string // e.g. "arm-linux-uclibcgnueabihf"
+
+	// OS profile (all best-effort, may be empty)
+	KernelVersion  string   // full uname -a
+	KernelBuild    string   // /proc/version
+	BusyBoxVersion string   // "v1.31.1"
+	DeviceModel    string   // "HiSilicon hi3516ev200"
+	LibcVersion    string   // "glibc 2.28" / "uClibc 0.9.33.2"
+	Uptime         string   // "3d 12:45"
+	TotalRAM       string   // "128 MB"
+	RootFSUsage    string   // "12M / 128M (9%)"
+	Mounts         []string // ["/ : squashfs,ro", "/tmp : tmpfs,rw"]
+	NetTools       []string // ["curl", "wget", "nc"]
 }
 
 // Detect connects to the target device and fingerprints its architecture.
