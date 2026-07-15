@@ -13,7 +13,7 @@ VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 PLATFORMS := windows linux darwin
 ARCHITECTURES := amd64
 
-all: clean test build
+all: clean test fileloaders build
 
 local:
 	$(GOBUILD) -o $(BINARY_NAME) .
@@ -45,6 +45,7 @@ build:
 #   mipsel-uclibc, mips-uclibc
 #   x86-glibc, x86_64-glibc
 HELPER_SRC=internal/helpers/src/elfreader.c
+FILELOADER_SRC=internal/helpers/src/fileloader.c
 HELPER_BIN_DIR=internal/helpers/bin
 HELPER_WORKDIR=/workspace
 CFLAGS_COMMON=-std=c99 -s -Os
@@ -137,6 +138,83 @@ helpers-clean:
 	touch $(HELPER_BIN_DIR)/elfreader-x86-glibc
 	touch $(HELPER_BIN_DIR)/elfreader-x86_64-glibc
 
+# --- Fileloader (fast file transfer) ---
+
+fileloaders: fileloaders-arm fileloaders-aarch64 fileloaders-mipsel fileloaders-mips fileloaders-x86 fileloaders-x86_64
+	@echo "=== Fileloaders built ==="
+	@ls -lh $(HELPER_BIN_DIR)/fileloader-*
+
+fileloaders-arm:
+	mkdir -p $(HELPER_BIN_DIR)
+	docker run --platform linux/amd64 --rm \
+		-v "$(shell pwd):$(HELPER_WORKDIR)" \
+		efilin/arm-hisiv500-linux \
+		arm-hisiv500-linux-uclibcgnueabi-gcc $(CFLAGS_COMMON) \
+		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-arm-uclibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)
+	docker run --platform linux/amd64 --rm \
+		-v "$(shell pwd):$(HELPER_WORKDIR)" \
+		efilin/arm-ca9-linux-gnueabihf-6.5 \
+		arm-ca9-linux-gnueabihf-gcc $(CFLAGS_COMMON) -march=armv5te \
+		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-arm-glibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)
+	docker run --platform linux/amd64 --rm \
+		-v "$(shell pwd):$(HELPER_WORKDIR)" \
+		efilin/arm-gcc7.3-linux-musleabi \
+		arm-gcc7.3-linux-musleabi-gcc $(CFLAGS_COMMON) \
+		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-arm-musl $(HELPER_WORKDIR)/$(FILELOADER_SRC)
+
+fileloaders-aarch64:
+	mkdir -p $(HELPER_BIN_DIR)
+	docker run --platform linux/amd64 --rm \
+		-v "$(shell pwd):$(HELPER_WORKDIR)" \
+		efilin/aarch64-mix210-linux \
+		aarch64-mix210-linux-gcc $(CFLAGS_COMMON) \
+		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-aarch64-glibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)
+
+fileloaders-mipsel:
+	mkdir -p $(HELPER_BIN_DIR)
+	docker run --platform linux/amd64 --rm \
+		-v "$(shell pwd):$(HELPER_WORKDIR)" \
+		efilin/mips-gcc720-uclibc229-r519 \
+		mips-linux-uclibc-gcc $(CFLAGS_COMMON) -EL \
+		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-mipsel-uclibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)
+
+fileloaders-mips:
+	mkdir -p $(HELPER_BIN_DIR)
+	docker run --platform linux/amd64 --rm \
+		-v "$(shell pwd):$(HELPER_WORKDIR)" \
+		efilin/mips-gcc720-uclibc229-r519 \
+		mips-linux-uclibc-gcc $(CFLAGS_COMMON) \
+		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-mips-uclibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)
+
+fileloaders-x86:
+	mkdir -p $(HELPER_BIN_DIR)
+	docker run --platform linux/amd64 --rm \
+		-v "$(shell pwd):$(HELPER_WORKDIR)" \
+		ubuntu:22.04 bash -c '\
+			apt-get update -qq && apt-get install -y -qq gcc-multilib && \
+			gcc -std=c99 -s -Os -m32 \
+				-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-x86-glibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)'
+
+fileloaders-x86_64:
+	mkdir -p $(HELPER_BIN_DIR)
+	docker run --platform linux/amd64 --rm \
+		-v "$(shell pwd):$(HELPER_WORKDIR)" \
+		ubuntu:22.04 bash -c '\
+			apt-get update -qq && apt-get install -y -qq gcc && \
+			gcc -std=c99 -s -Os \
+				-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-x86_64-glibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)'
+
+fileloaders-clean:
+	rm -f $(HELPER_BIN_DIR)/fileloader-*
+	touch $(HELPER_BIN_DIR)/fileloader-arm-uclibc
+	touch $(HELPER_BIN_DIR)/fileloader-arm-glibc
+	touch $(HELPER_BIN_DIR)/fileloader-arm-musl
+	touch $(HELPER_BIN_DIR)/fileloader-aarch64-glibc
+	touch $(HELPER_BIN_DIR)/fileloader-mipsel-uclibc
+	touch $(HELPER_BIN_DIR)/fileloader-mips-uclibc
+	touch $(HELPER_BIN_DIR)/fileloader-x86-glibc
+	touch $(HELPER_BIN_DIR)/fileloader-x86_64-glibc
+
 # wistic/telnetd default credentials are user:password
 test-integration-detect:
 	docker compose -f tests/docker-compose.yaml up -d
@@ -145,4 +223,5 @@ test-integration-detect:
 	docker compose -f tests/docker-compose.yaml down
 
 .PHONY: all local test clean build helpers helpers-clean test-integration-detect \
-        helpers-arm helpers-aarch64 helpers-mipsel helpers-mips helpers-x86 helpers-x86_64
+        helpers-arm helpers-aarch64 helpers-mipsel helpers-mips helpers-x86 helpers-x86_64 \
+        fileloaders fileloaders-arm fileloaders-aarch64 fileloaders-mipsel fileloaders-mips fileloaders-x86 fileloaders-x86_64 fileloaders-clean
