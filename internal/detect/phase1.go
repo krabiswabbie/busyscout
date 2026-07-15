@@ -157,9 +157,9 @@ func parseCPUInfo(output string, fp *Fingerprint) {
 
 	// MIPS byteorder
 	if strings.Contains(output, "byteorder") {
-		re := regexp.MustCompile(`byteorder\s*:\s*(\S+)`)
+		re := regexp.MustCompile(`byteorder\s*:\s*(.+)`)
 		if m := re.FindStringSubmatch(output); m != nil {
-			switch strings.ToLower(m[1]) {
+			switch strings.ToLower(strings.TrimSpace(m[1])) {
 			case "little endian":
 				fp.Endianness = "little"
 			case "big endian":
