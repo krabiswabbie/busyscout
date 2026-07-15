@@ -1,7 +1,17 @@
 #!/bin/bash
 # tests/integration_xfer_test.sh
 # Integration test for fast file transfer (push + pull)
+#
+# NOTE: This test requires a telnetd container with glibc (not busybox).
+# The current docker-compose.yaml uses wistic/telnetd (busybox-based),
+# which lacks the dynamic linker needed by the fileloader binary.
+# For a real run, use a ubuntu:22.04 container with telnetd + glibc.
 set -e
+
+cleanup() {
+    docker compose -f "$(dirname "$0")/docker-compose.yaml" down 2>/dev/null || true
+}
+trap cleanup EXIT
 
 BINARY="${1:-./busyscout}"
 REMOTE="user:password@127.0.0.1:2323:/tmp"
