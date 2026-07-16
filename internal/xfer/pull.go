@@ -41,8 +41,7 @@ func Pull(tc *telnet.TelnetClient, remotePath, localPath, isa, libc, hostIP stri
 	// 5. Execute fileloader on device (in background via & so telnet returns)
 	// Determine BusyScout's IP reachable from device — use the same interface as device
 	busyIP := getLocalIPForDevice(hostIP)
-	cmd := fmt.Sprintf("( %s pull %s %d %s </dev/null >/dev/null 2>&1 & )", loaderPath, busyIP, port, remotePath)
-	if _, err := tc.Execute("sh", "-c", cmd); err != nil {
+	if _, err := tc.Execute(loaderPath, "pull", busyIP, fmt.Sprintf("%d", port), remotePath); err != nil {
 		return errorx.Decorate(err, "failed to start fileloader on device")
 	}
 

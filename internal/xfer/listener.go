@@ -31,7 +31,7 @@ func StartListener() (int, net.Listener, error) {
 func AcceptAndPush(ln net.Listener, localPath string) error {
 	// Set deadline for the device fileloader to connect
 	if tl, ok := ln.(*net.TCPListener); ok {
-		tl.SetDeadline(time.Now().Add(10 * time.Second))
+		tl.SetDeadline(time.Now().Add(15 * time.Second))
 	}
 
 	conn, err := ln.Accept()
@@ -78,7 +78,7 @@ func AcceptAndPush(ln net.Listener, localPath string) error {
 func AcceptAndPull(ln net.Listener, localPath string) error {
 	// Set deadline for the device fileloader to connect
 	if tl, ok := ln.(*net.TCPListener); ok {
-		tl.SetDeadline(time.Now().Add(10 * time.Second))
+		tl.SetDeadline(time.Now().Add(15 * time.Second))
 	}
 
 	conn, err := ln.Accept()

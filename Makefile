@@ -204,6 +204,15 @@ fileloaders-x86_64:
 			gcc -std=c99 -s -Os \
 				-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-x86_64-glibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)'
 
+fileloaders-x86_64-musl:
+	mkdir -p $(HELPER_BIN_DIR)
+	docker run --platform linux/amd64 --rm \
+		-v "$(shell pwd):$(HELPER_WORKDIR)" \
+		alpine:3.20 sh -c '\
+			apk add --no-cache gcc musl-dev && \
+			gcc -std=c99 -s -Os \
+				-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-x86_64-musl $(HELPER_WORKDIR)/$(FILELOADER_SRC)'
+
 fileloaders-clean:
 	rm -f $(HELPER_BIN_DIR)/fileloader-*
 	touch $(HELPER_BIN_DIR)/fileloader-arm-uclibc
@@ -234,7 +243,7 @@ qemu-arm-setup:
 test-integration-detect:
 	docker compose -f tests/docker-compose.yaml up telnet-x86_64 -d
 	sleep 2
-	go run . detect user:password@127.0.0.1:2323
+	go run . detect user:password@127.0.0.1:2323:/
 	docker compose -f tests/docker-compose.yaml down
 
 # Fast file transfer — x86_64 glibc (port 2323, always available)
@@ -266,4 +275,4 @@ test-integration-xfer: test-integration-xfer-x86_64
         test-integration-xfer-x86_64 test-integration-xfer-aarch64 test-integration-xfer-arm \
         qemu-arm-setup \
         helpers-arm helpers-aarch64 helpers-mipsel helpers-mips helpers-x86 helpers-x86_64 \
-        fileloaders fileloaders-arm fileloaders-aarch64 fileloaders-mipsel fileloaders-mips fileloaders-x86 fileloaders-x86_64 fileloaders-clean
+        fileloaders fileloaders-arm fileloaders-aarch64 fileloaders-mipsel fileloaders-mips fileloaders-x86 fileloaders-x86_64 fileloaders-x86_64-musl fileloaders-clean

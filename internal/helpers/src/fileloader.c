@@ -17,6 +17,7 @@
  *     [1B type=0x04] [4B msglen] [error message]
  */
 
+#define _GNU_SOURCE
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -278,6 +279,24 @@ int main(int argc, char **argv) {
         fprintf(stderr, "pull requires filename\n");
         return 1;
     }
+
+    // Daemonize: double-fork to survive shell exit / telnetd hangup.
+    // BusyBox ash kills background jobs when the shell exits, so the
+    // fileloader must detach from its parent session before the shell
+    // terminates (which happens immediately after "&" returns).
+    {
+        pid_t pid = fork();
+        if (pid < 0) { perror("fork"); return 1; }
+        if (pid > 0) _exit(0);          // parent exits
+
+        setsid();                        // new session, no controlling terminal
+
+        pid = fork();
+        if (pid < 0) { perror("fork2"); return 1; }
+        if (pid > 0) _exit(0);          // first child exits, daemon is grandchild
+    }
+
+    // From here on we are fully detached from the original shell/telnet session.
 
     int sock = connect_to(ip, port);
     if (sock < 0) return 1;
