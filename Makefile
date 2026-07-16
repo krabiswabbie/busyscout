@@ -223,12 +223,11 @@ test-integration-detect:
 	docker compose -f tests/docker-compose.yaml down
 
 # Integration test for fast file transfer (push + pull).
-# NOTE: currently cannot run on ARM (Apple Silicon) because wistic/telnetd is x86_64 only.
+# wistic/telnetd is x86_64; runs via Rosetta on Apple Silicon.
 test-integration-xfer:
 	docker compose -f tests/docker-compose.yaml up -d
 	sleep 2
 	bash tests/integration_xfer_test.sh ./busyscout
-	docker compose -f tests/docker-compose.yaml down
 
 .PHONY: all local test clean build helpers helpers-clean test-integration-detect test-integration-xfer \
         helpers-arm helpers-aarch64 helpers-mipsel helpers-mips helpers-x86 helpers-x86_64 \

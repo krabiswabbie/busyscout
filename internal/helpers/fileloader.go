@@ -30,6 +30,15 @@ var fileloaderX86Glibc []byte
 //go:embed bin/fileloader-x86_64-glibc
 var fileloaderX8664Glibc []byte
 
+// FileloaderForISALE returns the little-endian MIPS fileloader for the given ISA and libc.
+// For non-MIPS ISAs, delegates to FileloaderForISA.
+func FileloaderForISALE(isa, libc string) ([]byte, error) {
+	if isa == "mips" {
+		return fileloaderMIPSELUclibc, nil
+	}
+	return FileloaderForISA(isa, libc)
+}
+
 // FileloaderForISA returns the embedded fileloader binary for the given ISA and libc family.
 func FileloaderForISA(isa, libc string) ([]byte, error) {
 	libcNorm := normalizeLibc(libc)
@@ -48,6 +57,8 @@ func FileloaderForISA(isa, libc string) ([]byte, error) {
 		return fileloaderAARCH64Glibc, nil
 	case "mips":
 		return fileloaderMIPSUclibc, nil
+	case "mipsel":
+		return fileloaderMIPSELUclibc, nil
 	case "x86":
 		return fileloaderX86Glibc, nil
 	case "x86_64":

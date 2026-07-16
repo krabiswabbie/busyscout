@@ -31,6 +31,7 @@ type Scout struct {
 	bar       *progressbar.ProgressBar
 	isa       string // cached ISA from light detection
 	libc      string // cached libc from light detection
+	endian    string // "little" or "big" (only for MIPS)
 }
 
 func New(source, target string, verboseFlag bool) (*Scout, error) {
@@ -103,6 +104,16 @@ func (s *Scout) detectISALight() error {
 		s.libc = parseLibcFamily(string(stdout))
 	}
 
+	// MIPS endianness detection
+	if s.isa == "mips" {
+		stdout, err = tc.Execute("grep", "-i", "mipsel", "/proc/cpuinfo")
+		if err == nil && strings.Contains(strings.ToLower(string(stdout)), "mipsel") {
+			s.endian = "little"
+		} else {
+			s.endian = "big" // safe default
+		}
+	}
+
 	return nil
 }
 
@@ -140,6 +151,15 @@ func parseLibcFamily(output string) string {
 	}
 }
 
+// fileloaderISA returns the correct ISA for fileloader selection,
+// accounting for MIPS endianness (mipsel vs mips).
+func (s *Scout) fileloaderISA() string {
+	if s.isa == "mips" && s.endian == "little" {
+		return "mipsel"
+	}
+	return s.isa
+}
+
 func (s *Scout) Push() error {
 	// Detect same subnet
 	if xfer.IsSameSubnet(s.remote.Host) {
@@ -151,7 +171,7 @@ func (s *Scout) Push() error {
 				return err
 			}
 			defer tc.Close()
-			return xfer.Push(tc, s.localFile, s.remote.Path, s.isa, s.libc, s.remote.Host)
+			return xfer.Push(tc, s.localFile, s.remote.Path, s.fileloaderISA(), s.libc, s.remote.Host)
 		}
 	}
 
@@ -393,7 +413,7 @@ func (s *Scout) Pull(localPath string) error {
 				return err
 			}
 			defer tc.Close()
-			return xfer.Pull(tc, s.remote.Path, localPath, s.isa, s.libc, s.remote.Host)
+			return xfer.Pull(tc, s.remote.Path, localPath, s.fileloaderISA(), s.libc, s.remote.Host)
 		}
 	}
 
