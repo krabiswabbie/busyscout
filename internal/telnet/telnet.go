@@ -335,6 +335,11 @@ func (tc *TelnetClient) Execute(
 		return
 	}
 
+	// Reset deadline for this command (default 10s from Dial is not enough for multi-command sessions)
+	if err = tc.conn.SetReadDeadline(time.Now().Add(tc.Timeout)); err != nil {
+		return
+	}
+
 	request := []byte(name + " " + strings.Join(args, " ") + "\r\n")
 	tc.log("Send command: %s", request[:len(request)-2])
 	tc.Write(request)
