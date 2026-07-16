@@ -376,17 +376,17 @@ fileloaders-arm:
 	mkdir -p $(HELPER_BIN_DIR)
 	docker run --platform linux/amd64 --rm \
 		-v "$(shell pwd):$(HELPER_WORKDIR)" \
-		efilin/arm-hisiv500-linux \
+		krabiswabbie/arm-hisiv500-linux \
 		arm-hisiv500-linux-uclibcgnueabi-gcc $(CFLAGS_COMMON) \
 		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-arm-uclibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)
 	docker run --platform linux/amd64 --rm \
 		-v "$(shell pwd):$(HELPER_WORKDIR)" \
-		efilin/arm-ca9-linux-gnueabihf-6.5 \
+		krabiswabbie/arm-ca9-linux-gnueabihf-6.5 \
 		arm-ca9-linux-gnueabihf-gcc $(CFLAGS_COMMON) -march=armv5te \
 		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-arm-glibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)
 	docker run --platform linux/amd64 --rm \
 		-v "$(shell pwd):$(HELPER_WORKDIR)" \
-		efilin/arm-gcc7.3-linux-musleabi \
+		krabiswabbie/arm-gcc7.3-linux-musleabi \
 		arm-gcc7.3-linux-musleabi-gcc $(CFLAGS_COMMON) \
 		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-arm-musl $(HELPER_WORKDIR)/$(FILELOADER_SRC)
 
@@ -394,7 +394,7 @@ fileloaders-aarch64:
 	mkdir -p $(HELPER_BIN_DIR)
 	docker run --platform linux/amd64 --rm \
 		-v "$(shell pwd):$(HELPER_WORKDIR)" \
-		efilin/aarch64-mix210-linux \
+		krabiswabbie/aarch64-mix210-linux \
 		aarch64-mix210-linux-gcc $(CFLAGS_COMMON) \
 		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-aarch64-glibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)
 
@@ -402,7 +402,7 @@ fileloaders-mipsel:
 	mkdir -p $(HELPER_BIN_DIR)
 	docker run --platform linux/amd64 --rm \
 		-v "$(shell pwd):$(HELPER_WORKDIR)" \
-		efilin/mips-gcc720-uclibc229-r519 \
+		krabiswabbie/mips-gcc720-uclibc229-r519 \
 		mips-linux-uclibc-gcc $(CFLAGS_COMMON) -EL \
 		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-mipsel-uclibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)
 
@@ -410,7 +410,7 @@ fileloaders-mips:
 	mkdir -p $(HELPER_BIN_DIR)
 	docker run --platform linux/amd64 --rm \
 		-v "$(shell pwd):$(HELPER_WORKDIR)" \
-		efilin/mips-gcc720-uclibc229-r519 \
+		krabiswabbie/mips-gcc720-uclibc229-r519 \
 		mips-linux-uclibc-gcc $(CFLAGS_COMMON) \
 		-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-mips-uclibc $(HELPER_WORKDIR)/$(FILELOADER_SRC)
 
