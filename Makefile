@@ -13,13 +13,15 @@ VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 PLATFORMS := windows linux darwin
 ARCHITECTURES := amd64
 
-all: clean test helpers fileloaders build
+deps: helpers fileloaders
+
+all: clean test deps build local-full
 
 local: helpers-clean fileloaders-clean
 	@echo "WARNING: building with stub helpers — detect/xfer will fail at runtime"
 	$(GOBUILD) -o $(BINARY_NAME) .
 
-local-full: helpers fileloaders
+local-full: deps
 	$(GOBUILD) -o $(BINARY_NAME) .
 
 test:
@@ -287,7 +289,7 @@ test-integration-xfer-arm: local-full qemu-arm-setup
 # All fast file transfer tests
 test-integration-xfer: test-integration-xfer-x86_64
 
-.PHONY: all local local-full test clean build helpers helpers-clean \
+.PHONY: all deps local local-full test clean build helpers helpers-clean \
         test-integration-detect test-integration-xfer \
         test-integration-xfer-x86_64 test-integration-xfer-aarch64 test-integration-xfer-arm \
         qemu-arm-setup \
