@@ -1,6 +1,6 @@
 # x86_64 glibc telnetd for BusyScout integration tests
 # Runs natively on x86_64, via Rosetta on Apple Silicon
-FROM ubuntu:22.04
+FROM --platform=linux/amd64 ubuntu:22.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     telnetd xinetd \
