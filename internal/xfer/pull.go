@@ -30,7 +30,7 @@ func Pull(dial func() (*telnet.TelnetClient, error), remotePath, localPath, isa,
 		tc        *telnet.TelnetClient
 		uploadErr error
 	)
-	for _, lineSize := range []int{512, 256, 128} {
+	for _, lineSize := range []int{1024, 512, 256, 128} {
 		tc, err = dial()
 		if err != nil {
 			return errorx.Decorate(err, "failed to connect")
