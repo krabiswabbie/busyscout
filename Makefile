@@ -215,20 +215,55 @@ fileloaders-clean:
 	touch $(HELPER_BIN_DIR)/fileloader-x86-glibc
 	touch $(HELPER_BIN_DIR)/fileloader-x86_64-glibc
 
-# wistic/telnetd default credentials are user:password
+# --- Integration tests (multi-ISA) ---
+#
+# Containers (tests/docker-compose.yaml):
+#   telnet-x86_64  — x86_64 glibc (port 2323)
+#   telnet-aarch64 — aarch64 glibc (port 2324, native on Apple Silicon)
+#   telnet-arm     — arm32 musl   (port 2325, requires QEMU on non-ARM)
+#
+# All containers use user:password.
+
+# QEMU setup for ARM emulation on x86_64 hosts
+qemu-arm-setup:
+	@if [ "$$(uname -m)" != "aarch64" ] && [ "$$(uname -m)" != "arm64" ]; then \
+		docker run --rm --privileged aptible/qemu-user-static --reset 2>/dev/null || true; \
+	fi
+
+# Detect test — x86_64 glibc container (port 2323)
 test-integration-detect:
-	docker compose -f tests/docker-compose.yaml up -d
+	docker compose -f tests/docker-compose.yaml up telnet-x86_64 -d
 	sleep 2
 	go run . detect user:password@127.0.0.1:2323
 	docker compose -f tests/docker-compose.yaml down
 
-# Integration test for fast file transfer (push + pull).
-# wistic/telnetd is x86_64; runs via Rosetta on Apple Silicon.
-test-integration-xfer:
-	docker compose -f tests/docker-compose.yaml up -d
+# Fast file transfer — x86_64 glibc (port 2323, always available)
+test-integration-xfer-x86_64:
+	docker compose -f tests/docker-compose.yaml up telnet-x86_64 -d
 	sleep 2
-	bash tests/integration_xfer_test.sh ./busyscout
+	bash tests/integration_xfer_test.sh ./busyscout 2323 x86_64-glibc
+	docker compose -f tests/docker-compose.yaml down
 
-.PHONY: all local test clean build helpers helpers-clean test-integration-detect test-integration-xfer \
+# Fast file transfer — aarch64 glibc (port 2324, native on Apple Silicon)
+test-integration-xfer-aarch64:
+	docker compose -f tests/docker-compose.yaml up telnet-aarch64 -d
+	sleep 2
+	bash tests/integration_xfer_test.sh ./busyscout 2324 aarch64-glibc
+	docker compose -f tests/docker-compose.yaml down
+
+# Fast file transfer — arm32 musl (port 2325, requires QEMU)
+test-integration-xfer-arm: qemu-arm-setup
+	docker compose -f tests/docker-compose.yaml up telnet-arm -d
+	sleep 2
+	bash tests/integration_xfer_test.sh ./busyscout 2325 arm-musl
+	docker compose -f tests/docker-compose.yaml down
+
+# All fast file transfer tests
+test-integration-xfer: test-integration-xfer-x86_64
+
+.PHONY: all local test clean build helpers helpers-clean \
+        test-integration-detect test-integration-xfer \
+        test-integration-xfer-x86_64 test-integration-xfer-aarch64 test-integration-xfer-arm \
+        qemu-arm-setup \
         helpers-arm helpers-aarch64 helpers-mipsel helpers-mips helpers-x86 helpers-x86_64 \
         fileloaders fileloaders-arm fileloaders-aarch64 fileloaders-mipsel fileloaders-mips fileloaders-x86 fileloaders-x86_64 fileloaders-clean
