@@ -287,7 +287,7 @@ func (s *Scout) sendChunk(data []byte, targetFileName string) (progress int, err
 	}
 	defer tc.Close()
 
-	if errSend := helpers.UploadData(tc, data, toUnixPath(targetFileName)); errSend != nil {
+	if errSend := helpers.UploadData(tc, data, toUnixPath(targetFileName), helpers.DefaultLineSize); errSend != nil {
 		return 0, errSend
 	}
 

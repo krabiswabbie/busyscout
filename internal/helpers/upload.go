@@ -9,7 +9,7 @@ import (
 
 // UploadData sends binary data to a remote file via printf over an already-open telnet connection.
 // The caller owns the connection lifecycle (Dial/Close).
-func UploadData(tc *telnet.TelnetClient, data []byte, targetFileName string) error {
+func UploadData(tc *telnet.TelnetClient, data []byte, targetFileName string, lineSize int) error {
 	targetFileName = toUnixPath(targetFileName)
 	redirectMode := ">"
 
@@ -34,9 +34,8 @@ func UploadData(tc *telnet.TelnetClient, data []byte, targetFileName string) err
 	return nil
 }
 
-const (
-	lineSize = 128
-)
+// DefaultLineSize is the safe printf chunk size for unknown devices.
+const DefaultLineSize = 128
 
 // toUnixPath converts a path to use forward slashes, regardless of platform
 func toUnixPath(path string) string {

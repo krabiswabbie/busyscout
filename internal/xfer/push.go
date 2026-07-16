@@ -20,7 +20,7 @@ func Push(tc *telnet.TelnetClient, localPath, remotePath, isa, libc, hostIP stri
 	}
 
 	// 2. Upload fileloader via printf
-	if err := helpers.UploadData(tc, loader, loaderPath); err != nil {
+	if err := helpers.UploadData(tc, loader, loaderPath, helpers.DefaultLineSize); err != nil {
 		return errorx.Decorate(err, "failed to upload fileloader")
 	}
 
