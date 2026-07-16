@@ -3,6 +3,7 @@ package xfer
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/joomcode/errorx"
 	"github.com/krabiswabbie/busyscout/internal/helpers"
@@ -33,6 +34,7 @@ func Push(dial func() (*telnet.TelnetClient, error), localPath, remotePath, isa,
 		if err != nil {
 			return errorx.Decorate(err, "failed to connect")
 		}
+		tc.Timeout = 3 * time.Second
 		uploadErr = helpers.UploadData(tc, loader, loaderPath, lineSize)
 		if uploadErr == nil {
 			break
