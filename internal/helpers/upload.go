@@ -10,9 +10,6 @@ import (
 // UploadData sends binary data to a remote file via printf over an already-open telnet connection.
 // The caller owns the connection lifecycle (Dial/Close).
 func UploadData(tc *telnet.TelnetClient, data []byte, targetFileName string, lineSize int) error {
-	if lineSize <= 0 {
-		return fmt.Errorf("lineSize must be positive, got %d", lineSize)
-	}
 	targetFileName = toUnixPath(targetFileName)
 	redirectMode := ">"
 
