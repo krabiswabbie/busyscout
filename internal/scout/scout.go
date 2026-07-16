@@ -169,7 +169,12 @@ func (s *Scout) Push() error {
 		if err := s.detectISALight(); err != nil {
 			// Fall through to printf mode on detection failure
 		} else {
-			return xfer.Push(s.newClient, s.localFile, s.remote.Path, s.fileloaderISA(), s.libc, s.remote.Host)
+			tc, err := s.newClient()
+			if err != nil {
+				return err
+			}
+			defer tc.Close()
+			return xfer.Push(tc, s.localFile, s.remote.Path, s.fileloaderISA(), s.libc, s.remote.Host)
 		}
 	}
 
@@ -406,7 +411,12 @@ func (s *Scout) Pull(localPath string) error {
 		if err := s.detectISALight(); err != nil {
 			// Fall through to printf mode
 		} else {
-			return xfer.Pull(s.newClient, s.remote.Path, localPath, s.fileloaderISA(), s.libc, s.remote.Host)
+			tc, err := s.newClient()
+			if err != nil {
+				return err
+			}
+			defer tc.Close()
+			return xfer.Pull(tc, s.remote.Path, localPath, s.fileloaderISA(), s.libc, s.remote.Host)
 		}
 	}
 

@@ -9,41 +9,29 @@ import (
 )
 
 // Pull downloads a remote file from the device via fast TCP mode.
-// dial creates a new telnet connection — called once per fallback attempt
-// for the fileloader upload, plus retained for chmod and execute.
+// tc is an open telnet connection to the device.
 // remotePath is the file path on the device to download.
 // localPath is where to save the downloaded file on the BusyScout host.
 // isa and libc are detected architecture info for selecting the correct fileloader.
 // hostIP is the device IP, used to determine which local interface to bind the listener on.
-func Pull(dial func() (*telnet.TelnetClient, error), remotePath, localPath, isa, libc, hostIP string) error {
+func Pull(tc *telnet.TelnetClient, remotePath, localPath, isa, libc, hostIP string) error {
 	// 1. Select fileloader
 	loader, err := helpers.FileloaderForISA(isa, libc)
 	if err != nil {
 		return errorx.Decorate(err, "unsupported architecture")
 	}
 
-	// 2. Upload fileloader via printf with auto-fallback chunk size.
-	// Each attempt opens a fresh connection in case the previous one
-	// was killed by a too-long command.
-	var (
-		tc        *telnet.TelnetClient
-		uploadErr error
-	)
+	// 2. Upload fileloader via printf with auto-fallback chunk size
+	var uploadErr error
 	for _, lineSize := range []int{1024, 512, 256, 128} {
-		tc, err = dial()
-		if err != nil {
-			return errorx.Decorate(err, "failed to connect")
-		}
 		uploadErr = helpers.UploadData(tc, loader, loaderPath, lineSize)
 		if uploadErr == nil {
 			break
 		}
-		tc.Close()
 	}
 	if uploadErr != nil {
 		return errorx.Decorate(uploadErr, "failed to upload fileloader")
 	}
-	defer tc.Close()
 
 	// 3. chmod +x
 	if _, err := tc.Execute("chmod", "+x", loaderPath); err != nil {
