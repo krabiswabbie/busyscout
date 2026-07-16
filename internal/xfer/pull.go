@@ -21,9 +21,16 @@ func Pull(tc *telnet.TelnetClient, remotePath, localPath, isa, libc, hostIP stri
 		return errorx.Decorate(err, "unsupported architecture")
 	}
 
-	// 2. Upload fileloader via printf
-	if err := helpers.UploadData(tc, loader, loaderPath, helpers.DefaultLineSize); err != nil {
-		return errorx.Decorate(err, "failed to upload fileloader")
+	// 2. Upload fileloader via printf with auto-fallback chunk size
+	var uploadErr error
+	for _, lineSize := range []int{1024, 512, 256, 128} {
+		uploadErr = helpers.UploadData(tc, loader, loaderPath, lineSize)
+		if uploadErr == nil {
+			break
+		}
+	}
+	if uploadErr != nil {
+		return errorx.Decorate(uploadErr, "failed to upload fileloader")
 	}
 
 	// 3. chmod +x
