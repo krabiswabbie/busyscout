@@ -21,7 +21,7 @@ func UploadData(tc *telnet.TelnetClient, data []byte, targetFileName string) err
 
 		cmd := "printf '"
 		for _, bt := range data[i:end] {
-			cmd += fmt.Sprintf("\\x%02x", bt)
+			cmd += fmt.Sprintf("\\%03o", bt)
 		}
 		cmd += fmt.Sprintf("' %s %s\n", redirectMode, targetFileName)
 		redirectMode = ">>"

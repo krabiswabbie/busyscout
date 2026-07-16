@@ -100,7 +100,7 @@ func (s *Scout) detectISALight() error {
 
 	// ls libc → libc family
 	// Check musl first (Alpine containers) — /lib/ld-musl-* exists only on musl
-	stdout, err = tc.Execute("sh", "-c", "ls /lib/ld-musl-* 2>/dev/null && echo MUSL_DETECTED; ls -l /lib/libc.so* /lib/ld-*.so* 2>/dev/null || true")
+	stdout, err = tc.Execute("sh -c 'ls /lib/ld-musl-* 2>/dev/null && echo MUSL_DETECTED; ls -l /lib/libc.so* /lib/ld-*.so* 2>/dev/null || true'")
 	if err == nil {
 		s.libc = parseLibcFamily(string(stdout))
 	}
