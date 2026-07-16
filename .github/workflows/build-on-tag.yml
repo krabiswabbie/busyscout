@@ -26,6 +26,9 @@ jobs:
       - name: Run tests
         run: make test
 
+      - name: Build helpers and fileloaders
+        run: make helpers fileloaders
+
       - name: Extract tag name
         id: tag
         run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV

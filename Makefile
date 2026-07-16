@@ -13,7 +13,7 @@ VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 PLATFORMS := windows linux darwin
 ARCHITECTURES := amd64
 
-all: clean test fileloaders build
+all: clean test helpers fileloaders build
 
 local:
 	$(GOBUILD) -o $(BINARY_NAME) .
@@ -140,7 +140,7 @@ helpers-clean:
 
 # --- Fileloader (fast file transfer) ---
 
-fileloaders: fileloaders-arm fileloaders-aarch64 fileloaders-mipsel fileloaders-mips fileloaders-x86 fileloaders-x86_64
+fileloaders: fileloaders-arm fileloaders-aarch64 fileloaders-mipsel fileloaders-mips fileloaders-x86 fileloaders-x86_64 fileloaders-x86_64-musl fileloaders-x86_64-static
 	@echo "=== Fileloaders built ==="
 	@ls -lh $(HELPER_BIN_DIR)/fileloader-*
 
@@ -213,6 +213,15 @@ fileloaders-x86_64-musl:
 			gcc -std=c99 -s -Os \
 				-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-x86_64-musl $(HELPER_WORKDIR)/$(FILELOADER_SRC)'
 
+fileloaders-x86_64-static:
+	mkdir -p $(HELPER_BIN_DIR)
+	docker run --platform linux/amd64 --rm \
+		-v "$(shell pwd):$(HELPER_WORKDIR)" \
+		alpine:3.20 sh -c '\
+			apk add --no-cache gcc musl-dev && \
+			gcc -std=c99 -s -Os -static \
+				-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-x86_64-static $(HELPER_WORKDIR)/$(FILELOADER_SRC)'
+
 fileloaders-clean:
 	rm -f $(HELPER_BIN_DIR)/fileloader-*
 	touch $(HELPER_BIN_DIR)/fileloader-arm-uclibc
@@ -223,6 +232,8 @@ fileloaders-clean:
 	touch $(HELPER_BIN_DIR)/fileloader-mips-uclibc
 	touch $(HELPER_BIN_DIR)/fileloader-x86-glibc
 	touch $(HELPER_BIN_DIR)/fileloader-x86_64-glibc
+	touch $(HELPER_BIN_DIR)/fileloader-x86_64-musl
+	touch $(HELPER_BIN_DIR)/fileloader-x86_64-static
 
 # --- Integration tests (multi-ISA) ---
 #
@@ -275,4 +286,4 @@ test-integration-xfer: test-integration-xfer-x86_64
         test-integration-xfer-x86_64 test-integration-xfer-aarch64 test-integration-xfer-arm \
         qemu-arm-setup \
         helpers-arm helpers-aarch64 helpers-mipsel helpers-mips helpers-x86 helpers-x86_64 \
-        fileloaders fileloaders-arm fileloaders-aarch64 fileloaders-mipsel fileloaders-mips fileloaders-x86 fileloaders-x86_64 fileloaders-x86_64-musl fileloaders-clean
+        fileloaders fileloaders-arm fileloaders-aarch64 fileloaders-mipsel fileloaders-mips fileloaders-x86 fileloaders-x86_64 fileloaders-x86_64-musl fileloaders-x86_64-static fileloaders-clean
