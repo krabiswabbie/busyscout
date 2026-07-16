@@ -99,7 +99,8 @@ func (s *Scout) detectISALight() error {
 	s.isa = parseUnameMachine(string(stdout))
 
 	// ls libc → libc family
-	stdout, err = tc.Execute("sh", "-c", "ls -l /lib/libc.so* /lib/ld-*.so* 2>/dev/null || true")
+	// Check musl first (Alpine containers) — /lib/ld-musl-* exists only on musl
+	stdout, err = tc.Execute("sh", "-c", "ls /lib/ld-musl-* 2>/dev/null && echo MUSL_DETECTED; ls -l /lib/libc.so* /lib/ld-*.so* 2>/dev/null || true")
 	if err == nil {
 		s.libc = parseLibcFamily(string(stdout))
 	}
@@ -140,9 +141,11 @@ func parseUnameMachine(output string) string {
 func parseLibcFamily(output string) string {
 	o := strings.ToLower(output)
 	switch {
+	case strings.Contains(o, "musl_detected"):
+		return "musl"
 	case strings.Contains(o, "uclibc"):
 		return "uclibc"
-	case strings.Contains(o, "musl"):
+	case strings.Contains(o, "musl") || strings.Contains(o, "ld-musl"):
 		return "musl"
 	case strings.Contains(o, "glibc") || strings.Contains(o, "libc.so"):
 		return "glibc"

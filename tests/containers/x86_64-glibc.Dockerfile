@@ -1,15 +1,10 @@
-# x86_64 glibc telnetd for BusyScout integration tests
-# Runs natively on x86_64, via Rosetta on Apple Silicon
-FROM --platform=linux/amd64 ubuntu:22.04
+# x86_64 telnetd for BusyScout integration tests
+# Uses Alpine (musl) + gcompat for glibc compatibility with fileloader-x86_64-glibc
+FROM --platform=linux/amd64 alpine:3.20
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    telnetd xinetd \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache busybox-extras gcompat
 
-RUN useradd -m user && echo "user:password" | chpasswd
-
-RUN echo "telnet stream tcp nowait root /usr/sbin/telnetd telnetd" > /etc/xinetd.d/telnet \
-    && echo "disable = no" >> /etc/xinetd.d/telnet
+RUN adduser -D user && echo "user:password" | chpasswd
 
 EXPOSE 23
-CMD ["xinetd", "-dontfork"]
+CMD ["telnetd", "-F", "-l", "/bin/login"]

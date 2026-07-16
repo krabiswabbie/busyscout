@@ -34,26 +34,33 @@
 #define TYPE_ERROR 0x04
 
 static int connect_to(const char *ip, int port) {
-    struct sockaddr_in addr;
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct addrinfo hints, *res, *rp;
+    char port_str[16];
+    int sock = -1;
+
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if (getaddrinfo(ip, port_str, &hints, &res) != 0) {
+        perror("getaddrinfo");
+        return -1;
+    }
+
+    for (rp = res; rp != NULL; rp = rp->ai_next) {
+        sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (sock < 0) continue;
+        if (connect(sock, rp->ai_addr, rp->ai_addrlen) == 0) break;
+        close(sock);
+        sock = -1;
+    }
+
+    freeaddrinfo(res);
+
     if (sock < 0) {
-        perror("socket");
-        return -1;
-    }
-
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons((unsigned short)port);
-
-    if (inet_pton(AF_INET, ip, &addr.sin_addr) <= 0) {
-        perror("inet_pton");
-        close(sock);
-        return -1;
-    }
-
-    if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         perror("connect");
-        close(sock);
         return -1;
     }
 

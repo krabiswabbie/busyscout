@@ -12,9 +12,6 @@ import (
 const loaderPath = "/tmp/bs-loader"
 
 // Push uploads a local file to the remote device via fast TCP mode.
-// tc is an open telnet connection to the device.
-// isa and libc are detected architecture info for selecting the correct fileloader.
-// hostIP is the device IP, used to determine which local interface to bind the listener on.
 func Push(tc *telnet.TelnetClient, localPath, remotePath, isa, libc, hostIP string) error {
 	// 1. Select fileloader
 	loader, err := helpers.FileloaderForISA(isa, libc)
@@ -42,7 +39,7 @@ func Push(tc *telnet.TelnetClient, localPath, remotePath, isa, libc, hostIP stri
 	// 5. Execute fileloader on device (in background via & so telnet returns)
 	// Determine BusyScout's IP reachable from device — use the same interface as device
 	busyIP := getLocalIPForDevice(hostIP)
-	cmd := fmt.Sprintf("%s push %s %d %s &", loaderPath, busyIP, port, remotePath)
+	cmd := fmt.Sprintf("( %s push %s %d %s </dev/null >/dev/null 2>&1 & )", loaderPath, busyIP, port, remotePath)
 	if _, err := tc.Execute("sh", "-c", cmd); err != nil {
 		return errorx.Decorate(err, "failed to start fileloader on device")
 	}
@@ -58,11 +55,38 @@ func Push(tc *telnet.TelnetClient, localPath, remotePath, isa, libc, hostIP stri
 	return nil
 }
 
+// firstNonLoopbackIP returns the first non-loopback IPv4 address found on local interfaces.
+func firstNonLoopbackIP() string {
+	ifaces, _ := net.Interfaces()
+	for _, iface := range ifaces {
+		addrs, _ := iface.Addrs()
+		for _, addr := range addrs {
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ip := ipNet.IP
+			if ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+				continue
+			}
+			if ip4 := ip.To4(); ip4 != nil {
+				return ip4.String()
+			}
+		}
+	}
+	return ""
+}
+
 // getLocalIPForDevice returns BusyScout's IP address on the interface that routes to deviceIP.
 func getLocalIPForDevice(deviceIP string) string {
 	devIP := net.ParseIP(deviceIP)
 	if devIP == nil {
 		return "127.0.0.1"
+	}
+
+	// Loopback: local test — use host.docker.internal (resolved by fileloader via getaddrinfo)
+	if devIP.IsLoopback() {
+		return "host.docker.internal"
 	}
 
 	ifaces, _ := net.Interfaces()

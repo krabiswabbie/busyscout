@@ -30,6 +30,18 @@ var fileloaderX86Glibc []byte
 //go:embed bin/fileloader-x86_64-glibc
 var fileloaderX8664Glibc []byte
 
+//go:embed bin/fileloader-x86_64-musl
+var fileloaderX8664Musl []byte
+
+//go:embed bin/fileloader-x86_64-static
+var fileloaderX8664Static []byte
+
+// FileloaderStatic returns a statically-linked fileloader for integration testing.
+// Use only when the target libc is unknown (e.g., Docker containers).
+func FileloaderStatic() []byte {
+	return fileloaderX8664Static
+}
+
 // FileloaderForISALE returns the little-endian MIPS fileloader for the given ISA and libc.
 // For non-MIPS ISAs, delegates to FileloaderForISA.
 func FileloaderForISALE(isa, libc string) ([]byte, error) {
@@ -62,6 +74,9 @@ func FileloaderForISA(isa, libc string) ([]byte, error) {
 	case "x86":
 		return fileloaderX86Glibc, nil
 	case "x86_64":
+		if libcNorm == "musl" {
+			return fileloaderX8664Musl, nil
+		}
 		return fileloaderX8664Glibc, nil
 	default:
 		return nil, errors.New("unsupported ISA: " + isa)
