@@ -15,7 +15,11 @@ ARCHITECTURES := amd64
 
 all: clean test helpers fileloaders build
 
-local:
+local: helpers-clean fileloaders-clean
+	@echo "WARNING: building with stub helpers — detect/xfer will fail at runtime"
+	$(GOBUILD) -o $(BINARY_NAME) .
+
+local-full: helpers fileloaders
 	$(GOBUILD) -o $(BINARY_NAME) .
 
 test:
@@ -128,6 +132,7 @@ helpers-x86_64:
 				-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/elfreader-x86_64-glibc $(HELPER_WORKDIR)/$(HELPER_SRC)'
 
 helpers-clean:
+	mkdir -p $(HELPER_BIN_DIR)
 	rm -f $(HELPER_BIN_DIR)/elfreader-*
 	touch $(HELPER_BIN_DIR)/elfreader-arm-uclibc
 	touch $(HELPER_BIN_DIR)/elfreader-arm-glibc
@@ -223,6 +228,7 @@ fileloaders-x86_64-static:
 				-o $(HELPER_WORKDIR)/$(HELPER_BIN_DIR)/fileloader-x86_64-static $(HELPER_WORKDIR)/$(FILELOADER_SRC)'
 
 fileloaders-clean:
+	mkdir -p $(HELPER_BIN_DIR)
 	rm -f $(HELPER_BIN_DIR)/fileloader-*
 	touch $(HELPER_BIN_DIR)/fileloader-arm-uclibc
 	touch $(HELPER_BIN_DIR)/fileloader-arm-glibc
@@ -251,28 +257,28 @@ qemu-arm-setup:
 	fi
 
 # Detect test — x86_64 glibc container (port 2323)
-test-integration-detect:
+test-integration-detect: local-full
 	docker compose -f tests/docker-compose.yaml up telnet-x86_64 -d
 	sleep 2
-	go run . detect user:password@127.0.0.1:2323:/
+	./$(BINARY_NAME) detect user:password@127.0.0.1:2323:/
 	docker compose -f tests/docker-compose.yaml down
 
 # Fast file transfer — x86_64 glibc (port 2323, always available)
-test-integration-xfer-x86_64:
+test-integration-xfer-x86_64: local-full
 	docker compose -f tests/docker-compose.yaml up telnet-x86_64 -d
 	sleep 2
 	bash tests/integration_xfer_test.sh ./busyscout 2323 x86_64-glibc
 	docker compose -f tests/docker-compose.yaml down
 
 # Fast file transfer — aarch64 glibc (port 2324, native on Apple Silicon)
-test-integration-xfer-aarch64:
+test-integration-xfer-aarch64: local-full
 	docker compose -f tests/docker-compose.yaml up telnet-aarch64 -d
 	sleep 2
 	bash tests/integration_xfer_test.sh ./busyscout 2324 aarch64-glibc
 	docker compose -f tests/docker-compose.yaml down
 
 # Fast file transfer — arm32 musl (port 2325, requires QEMU)
-test-integration-xfer-arm: qemu-arm-setup
+test-integration-xfer-arm: local-full qemu-arm-setup
 	docker compose -f tests/docker-compose.yaml up telnet-arm -d
 	sleep 2
 	bash tests/integration_xfer_test.sh ./busyscout 2325 arm-musl
@@ -281,7 +287,7 @@ test-integration-xfer-arm: qemu-arm-setup
 # All fast file transfer tests
 test-integration-xfer: test-integration-xfer-x86_64
 
-.PHONY: all local test clean build helpers helpers-clean \
+.PHONY: all local local-full test clean build helpers helpers-clean \
         test-integration-detect test-integration-xfer \
         test-integration-xfer-x86_64 test-integration-xfer-aarch64 test-integration-xfer-arm \
         qemu-arm-setup \
