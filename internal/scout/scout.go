@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/joomcode/errorx"
+	"github.com/krabiswabbie/busyscout/internal/helpers"
 	"github.com/krabiswabbie/busyscout/internal/telnet"
+	"github.com/krabiswabbie/busyscout/internal/xfer"
 	"github.com/schollz/progressbar/v3"
 	"os"
 	"path/filepath"
@@ -27,6 +29,9 @@ type Scout struct {
 	remote    *RemoteFile
 	verbose   bool
 	bar       *progressbar.ProgressBar
+	isa       string // cached ISA from light detection
+	libc      string // cached libc from light detection
+	endian    string // "little" or "big" (only for MIPS)
 }
 
 func New(source, target string, verboseFlag bool) (*Scout, error) {
@@ -74,7 +79,106 @@ func (s *Scout) newClient() (*telnet.TelnetClient, error) {
 	return tc, nil
 }
 
+// detectISALight runs a quick ISA+libc detection on the device.
+func (s *Scout) detectISALight() error {
+	if s.isa != "" {
+		return nil // already cached
+	}
+
+	tc, err := s.newClient()
+	if err != nil {
+		return err
+	}
+	defer tc.Close()
+
+	// uname -m → ISA
+	stdout, err := tc.Execute("uname", "-m")
+	if err != nil {
+		return errorx.Decorate(err, "uname failed")
+	}
+	s.isa = parseUnameMachine(string(stdout))
+
+	// ls libc → libc family
+	// Check musl first (Alpine containers) — /lib/ld-musl-* exists only on musl
+	stdout, err = tc.Execute("sh -c 'ls /lib/ld-musl-* 2>/dev/null && echo MUSL_DETECTED; ls -l /lib/libc.so* /lib/ld-*.so* 2>/dev/null || true'")
+	if err == nil {
+		s.libc = parseLibcFamily(string(stdout))
+	}
+
+	// MIPS endianness detection
+	if s.isa == "mips" {
+		stdout, err = tc.Execute("grep", "-i", "mipsel", "/proc/cpuinfo")
+		if err == nil && strings.Contains(strings.ToLower(string(stdout)), "mipsel") {
+			s.endian = "little"
+		} else {
+			s.endian = "big" // safe default
+		}
+	}
+
+	return nil
+}
+
+// parseUnameMachine extracts ISA from uname -m output.
+func parseUnameMachine(output string) string {
+	o := strings.TrimSpace(strings.ToLower(output))
+	switch {
+	case strings.HasPrefix(o, "armv"):
+		return "arm"
+	case strings.HasPrefix(o, "aarch64"):
+		return "aarch64"
+	case strings.HasPrefix(o, "mips"):
+		return "mips"
+	case o == "i386" || o == "i486" || o == "i586" || o == "i686":
+		return "x86"
+	case o == "x86_64":
+		return "x86_64"
+	default:
+		return o
+	}
+}
+
+// parseLibcFamily detects libc family from ls output.
+func parseLibcFamily(output string) string {
+	o := strings.ToLower(output)
+	switch {
+	case strings.Contains(o, "musl_detected"):
+		return "musl"
+	case strings.Contains(o, "uclibc"):
+		return "uclibc"
+	case strings.Contains(o, "musl") || strings.Contains(o, "ld-musl"):
+		return "musl"
+	case strings.Contains(o, "glibc") || strings.Contains(o, "libc.so"):
+		return "glibc"
+	default:
+		return ""
+	}
+}
+
+// fileloaderISA returns the correct ISA for fileloader selection,
+// accounting for MIPS endianness (mipsel vs mips).
+func (s *Scout) fileloaderISA() string {
+	if s.isa == "mips" && s.endian == "little" {
+		return "mipsel"
+	}
+	return s.isa
+}
+
 func (s *Scout) Push() error {
+	// Detect same subnet
+	if xfer.IsSameSubnet(s.remote.Host) {
+		if err := s.detectISALight(); err != nil {
+			// Fall through to printf mode on detection failure
+		} else {
+			tc, err := s.newClient()
+			if err != nil {
+				return err
+			}
+			defer tc.Close()
+			return xfer.Push(tc, s.localFile, s.remote.Path, s.fileloaderISA(), s.libc, s.remote.Host)
+		}
+	}
+
+	// printf fallback
 	type jobDefinition struct {
 		fname string
 		data  []byte
@@ -183,35 +287,12 @@ func (s *Scout) sendChunk(data []byte, targetFileName string) (progress int, err
 	}
 	defer tc.Close()
 
-	// Ensure target filename uses forward slashes
-	targetFileName = toUnixPath(targetFileName)
-	redirectMode := ">"
-
-	// Iterate over the full chunk in 128 byte steps
-	for i := 0; i < len(data); i += lineSize {
-		end := i + lineSize
-		if end > len(data) {
-			end = len(data)
-		}
-
-		// Construct the command for the current sub-chunk
-		cmd := "printf '"
-		for _, bt := range data[i:end] {
-			cmd += fmt.Sprintf("\\x%02x", bt)
-		}
-		cmd += fmt.Sprintf("' %s %s\n", redirectMode, targetFileName) // Append to the file
-		redirectMode = ">>"
-
-		// Send the command
-		_, errExecute := tc.Execute(cmd)
-		if errExecute != nil {
-			return progress, errExecute
-		}
-
-		progress += end - i
-		s.bar.Add(end - i)
+	if errSend := helpers.UploadData(tc, data, toUnixPath(targetFileName)); errSend != nil {
+		return 0, errSend
 	}
 
+	progress = len(data)
+	s.bar.Add(progress)
 	return progress, nil
 }
 
@@ -321,4 +402,42 @@ func (s *Scout) checkIsRemoteDirectory(path string) (bool, error) {
 // toUnixPath converts a path to use forward slashes, regardless of platform
 func toUnixPath(path string) string {
 	return strings.ReplaceAll(path, "\\", "/")
+}
+
+// Pull downloads a file from the remote device.
+func (s *Scout) Pull(localPath string) error {
+	// Detect same subnet
+	if xfer.IsSameSubnet(s.remote.Host) {
+		if err := s.detectISALight(); err != nil {
+			// Fall through to printf mode
+		} else {
+			tc, err := s.newClient()
+			if err != nil {
+				return err
+			}
+			defer tc.Close()
+			return xfer.Pull(tc, s.remote.Path, localPath, s.fileloaderISA(), s.libc, s.remote.Host)
+		}
+	}
+
+	// printf fallback
+	tc, err := s.newClient()
+	if err != nil {
+		return err
+	}
+	defer tc.Close()
+	return PullViaPrintf(tc, s.remote.Path, localPath)
+}
+
+// NewPull creates a Scout configured for downloading a file from a remote device.
+func NewPull(target string, verboseFlag bool) (*Scout, error) {
+	remote, err := ParseRemoteFileName(target)
+	if err != nil {
+		return nil, errorx.Decorate(err, "failed to parse remote address")
+	}
+
+	return &Scout{
+		remote:  remote,
+		verbose: verboseFlag,
+	}, nil
 }

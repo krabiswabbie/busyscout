@@ -1,2 +1,11 @@
 .idea
 releases
+internal/helpers/bin/
+
+# Qwen Code assistant files
+.qwen/
+.superpowers/
+
+# Compiled binaries
+busyscout
+busyscout-linux

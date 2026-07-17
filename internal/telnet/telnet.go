@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -41,8 +40,6 @@ const (
 	loginRe    = "login:"
 	passwordRe = "Password:"
 )
-
-var bannerRe *regexp.Regexp = regexp.MustCompile("\\$|#")
 
 // TelnetClient is basic descriptor
 type TelnetClient struct {
@@ -258,15 +255,25 @@ func (tc *TelnetClient) ReadUntilPrompt(
 	return
 }
 
-// ReadUntilBanner reads until banner, i.e. whole output from command
+// ReadUntilBanner reads until banner, i.e. whole output from command.
+// Uses last-char check (# or $) instead of regex to avoid false positives
+// when $ or # appear in command output (e.g. "#1 PREEMPT" in kernel version).
 func (tc *TelnetClient) ReadUntilBanner() (output []byte, err error) {
 	output, err = tc.ReadUntilPrompt(func(data []byte) bool {
-		m := bannerRe.Find(data)
-		return len(m) > 0
+		trimmed := bytes.TrimSpace(data)
+		if len(trimmed) == 0 {
+			return false
+		}
+		last := trimmed[len(trimmed)-1]
+		return last == '#' || last == '$'
 	})
 
-	output = bannerRe.ReplaceAll(output, []byte{})
-	output = bytes.Trim(output, " ")
+	// Remove only the prompt line (from last \n to end),
+	// not all #/$ characters globally
+	if idx := bytes.LastIndex(output, []byte{'\n'}); idx >= 0 {
+		output = output[:idx]
+	}
+	output = bytes.TrimRight(output, " \r\n")
 
 	return
 }
@@ -297,8 +304,12 @@ func (tc *TelnetClient) waitWelcomeSigns() (err error) {
 			return false
 		}
 
-		m := bannerRe.Find(data)
-		return len(m) > 0
+		trimmed := bytes.TrimSpace(data)
+		if len(trimmed) == 0 {
+			return false
+		}
+		last := trimmed[len(trimmed)-1]
+		return last == '#' || last == '$'
 	})
 
 	return
@@ -321,6 +332,11 @@ func (tc *TelnetClient) Execute(
 ) (stdout []byte, err error) {
 	_, err = tc.reader.Discard(tc.reader.Buffered())
 	if err != nil {
+		return
+	}
+
+	// Reset deadline for this command (default 10s from Dial is not enough for multi-command sessions)
+	if err = tc.conn.SetReadDeadline(time.Now().Add(tc.Timeout)); err != nil {
 		return
 	}
 

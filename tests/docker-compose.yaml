@@ -1,14 +1,40 @@
+# BusyScout integration test containers — multi-ISA telnetd servers
+#
+# Containers:
+#   telnet-x86_64    — x86_64 glibc (port 2323)
+#   telnet-aarch64   — aarch64 glibc (port 2324, native on Apple Silicon)
+#   telnet-arm       — arm32 musl   (port 2325, requires QEMU on non-ARM)
+#
+# All: user:password
+
 services:
-  telnet-server:
-    image: wistic/telnetd
+  telnet-x86_64:
+    build:
+      context: containers
+      dockerfile: x86_64-glibc.Dockerfile
     ports:
-      - "23:23"
+      - "2323:23"
+    networks:
+      - telnet-net
+
+  telnet-aarch64:
+    build:
+      context: containers
+      dockerfile: aarch64-glibc.Dockerfile
+    ports:
+      - "2324:23"
+    networks:
+      - telnet-net
+
+  telnet-arm:
+    build:
+      context: containers
+      dockerfile: arm-musl.Dockerfile
+    ports:
+      - "2325:23"
     networks:
       - telnet-net
 
 networks:
   telnet-net:
     enable_ipv6: true
-
-## telnet ::1
-## user:password

@@ -1,78 +1,149 @@
 # BusyScout
 
-BusyScout is a utility designed for file upload over telnet, specifically targeting devices such as budget IP cameras that are built with BusyBox and typically lack conventional file transfer capabilities.
+BusyScout transfers files to and from BusyBox-based devices over telnet. It is intended for embedded systems such as IP cameras and NVRs that provide a telnet shell but no practical SSH, SCP, or FTP service.
 
-## Table of Contents
+BusyScout can:
 
-- [Introduction](#introduction)
-- [Usage](#usage)
-- [Rationale](#rationale)
-- [Method of Transfer](#method-of-transfer)
-- [Advantages](#advantages)
-- [Disadvantages](#disadvantages)
-- [Security Note](#security-note)
-- [License](#license)
+- upload and download files with `push` and `pull`;
+- choose automatically between fast reverse TCP transfer and a telnet-only fallback;
+- identify the target CPU, ABI, libc, and OS profile with `detect`.
 
-## Introduction
+> **Security:** telnet does not encrypt credentials or session data. Use BusyScout only on a trusted or otherwise protected network.
 
-This utility aims to enable file uploads to devices where traditional methods are not available, utilizing only telnet as the medium. BusyScout exploits the basic system functionalities to simulate file transfer capabilities in environments where only telnet access is possible.
+## Installation
+
+Download a workstation binary from [GitHub Releases](https://github.com/krabiswabbie/busyscout/releases/latest). Releases currently include Linux amd64, macOS amd64, and Windows amd64 binaries.
+
+To build from source, see [Building from source](#building-from-source).
 
 ## Usage
 
-Download the compiled version for your platform from the [Releases](https://github.com/krabiswabbie/busyscout/releases/latest) section OR build the utility from the source code provided.
+The common target format is:
 
-### Command Format
-
-```bash
-./busyscout <local_file> <remote_target> [--verbose]
+```text
+user:pass@host[:port]:/path
 ```
 
-The remote target format is: `user:pass@host:directory`
+The telnet port defaults to `23`. The colon before `/path` is required; IPv6 addresses must be enclosed in square brackets.
 
-Example:
-```bash
-# IPv4
-busyscout firmware.bin admin:12345@192.168.1.100:/tmp
+Examples:
 
-# IPv4 with specific port
-busyscout firmware.bin admin:12345@192.168.1.100:2323:/tmp
-
-# IPv6
-busyscout firmware.bin admin:12345@[2001:db8::1]:/tmp
-
-# With verbose logging
-busyscout firmware.bin admin:12345@192.168.1.100:/tmp --verbose
+```text
+root:password@192.168.1.100:/tmp
+root:password@192.168.1.100:2323:/tmp
+root:password@[2001:db8::1]:/tmp
 ```
 
-![](static/demo.gif)
+Credentials in the target may be visible in shell history or process listings.
 
-## Rationale
-Budget IP cameras, particularly from Hikvision, Dahua etc, often use [BusyBox](https://busybox.net/) and may allow telnet access but not SSH. Other file transfer possibilities like `mount`, `tftp`, or `nc` might be occasionally available, but some cameras restrict all conventional file transfer methods. BusyScout fills this gap by allowing file transfers strictly through telnet.
+### Commands
 
-## Method of Transfer
-Telnet protocol does not inherently support file transfers. However, an alternative approach involves using the telnet console to invoke the `printf` function to transmit bytes, which are then redirected into a file using standard Linux commands. Example commands include:
+| Command | Usage | Description |
+| --- | --- | --- |
+| `push` | `busyscout push <local> <target>` | Upload a local file. If the remote path is a directory, the local filename is used. |
+| `pull` | `busyscout pull <target> <local>` | Download a remote file to the specified local path. |
+| `detect` | `busyscout detect <target>` | Identify the target architecture and collect a best-effort OS profile. |
 
-```bash
-printf "\xDE\xAD\xBE\xEF\x...\xF0" > /tmp/bs.0001.part
-printf "\xCA\xFE\x33\xE1\x...\xD3" > /tmp/bs.0002.part
-...
-cat /tmp/bs.*.part > targetfile 
+Add `--verbose` to any command for connection and transfer details.
+
+Typical commands:
+
+```sh
+busyscout push firmware.bin root:password@192.168.1.100:/tmp/
+busyscout pull root:password@192.168.1.100:/tmp/config.db ./config.db
+busyscout detect root:password@192.168.1.100:/
 ```
 
-For efficiency, file transmission is executed in parallel across multiple telnet sessions, and the data is subsequently merged into a single file.
+`detect` reports the architecture, word size, endianness, ARM float ABI when applicable, libc, toolchain hint, and available OS information. For example:
 
-This method was initially described [here](https://unix.stackexchange.com/a/417895)
+```text
+Architecture:     ARMV7 (32-bit, little-endian)
+Float ABI:        hard-float (VFP)
+libc:             uClibc 1.0.31
+Toolchain:        armv7-linux-uclibceabihf
 
-## Advantages
-- Utilizes only widely available system functions, requiring no external commands or utilities.
-- Capable of transferring files in environments where other methods fail.
+OS Profile:
+  Kernel:    Linux (none) 4.9.84 #1 PREEMPT Thu Dec 21 14:08:11 CST 2023 armv7l GNU/Linux
+  BusyBox:   v1.20.2
+  Device:    SStar Soc (Flattened Device Tree) (INFINITY6B0 SSC009A-S01A QFN88)
+  Uptime:    10h 27m
+  RAM:       41 MB
+  Disk (/):  4.4M / 0 (100%)
+  Mounts:
+    / : squashfs,ro,relatime
+    /tmp : tmpfs,rw,relatime
+    /var : tmpfs,rw,relatime
+    /mnt : squashfs,ro,relatime
+  Tools:     wget
+```
 
-## Disadvantages
-- Low transfer speed, something about 3-5 kB/s is really nice.
-- No data integrity verification such as CRC etc. Only target file size is verified.
+## Transfer modes
 
-## Security Note
-The telnet protocol was designed in an era before security was a primary concern. While it may be the only method of interaction in some scenarios, using it comes with inherent risks. Use at your own risk.
+BusyScout selects the transfer method automatically:
+
+- **Reverse TCP:** a small matching fileloader connects from the device back to BusyScout. This is the fast path when the device can reach the workstation.
+- **Telnet fallback:** data is sent through the shell using `printf` and redirection. It is slower, but works when reverse connectivity is unavailable and does not depend on optional tools such as `base64`, `xxd`, or `nc`.
+
+BusyScout adapts the loader transfer to command-length limits found on restricted BusyBox systems. Important files should be verified separately: BusyScout reports transfer errors but does not provide encryption or cryptographic integrity verification.
+
+## Supported target platforms
+
+The embedded helper variants cover:
+
+| Platform | Coverage |
+| --- | --- |
+| ARM 32-bit (v5/v6/v7) | Little-endian; glibc, uClibc, and musl; applicable soft- and hard-float variants |
+| AArch64 | Little-endian; glibc |
+| MIPS 32-bit | Little- and big-endian; uClibc |
+| x86 32-bit | Little-endian; glibc |
+| x86_64 64-bit | Little-endian; glibc and musl |
+
+The helper must match the device CPU, byte order, ABI, libc, and dynamic loader.
+
+## Building from source
+
+Requirements:
+
+- Go 1.22.2 or newer;
+- `make`;
+- Docker to rebuild embedded helpers and fileloaders;
+- Docker Compose for integration tests.
+
+```sh
+make local       # build a local binary with placeholder helpers
+make local-full  # build a local binary with all embedded helpers
+make build       # build release binaries in releases/
+make all         # run the complete default pipeline
+```
+
+`make local` is sufficient for Go-level tests, but target operations require `make local-full`. Generated helper binaries are build artifacts and are not intended to be committed. See [`docs/V2.md`](docs/V2.md) for implementation details and design history.
+
+## Testing
+
+```sh
+make test
+make test-integration-detect
+make test-integration-xfer-x86_64
+make test-integration-xfer-aarch64
+make test-integration-xfer-arm
+```
+
+The integration containers use `user:password` and expose telnet on ports `2323` through `2325`. The ARM test uses QEMU when necessary.
+
+## Troubleshooting
+
+If a target helper reports `not found` even though the file exists, the binary may have the wrong CPU, endianness, ARM sub-architecture, float ABI, libc, or dynamic linker. Start with:
+
+```sh
+uname -a
+cat /proc/cpuinfo
+cat /proc/version
+ls -l /lib/libc.so* /lib/ld-*.so* /lib/ld-uClibc* /lib/ld-musl* 2>/dev/null
+od -An -t x1 -N20 /bin/busybox | head -1
+```
+
+The target must allow telnet login and provide writable temporary storage for staging a helper or transfer file. OS fields are best-effort and may be empty on stripped firmware.
 
 ## License
+
 [MIT License](LICENSE)
