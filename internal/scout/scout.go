@@ -51,6 +51,11 @@ func New(source, target string, verboseFlag bool) (*Scout, error) {
 		verbose:   verboseFlag,
 	}
 
+	// Default to /tmp if no remote path specified
+	if remote.Path == "" {
+		remote.Path = "/tmp/" + filepath.Base(source)
+	}
+
 	// Add the target filename if only target directory is specified
 	isDir, errDir := s.checkIsRemoteDirectory(remote.Path)
 	if errDir != nil {
