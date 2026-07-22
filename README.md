@@ -21,17 +21,18 @@ To build from source, see [Building from source](#building-from-source).
 The common target format is:
 
 ```text
-user:pass@host[:port]:/path
+user:pass@host[:port][:/path]
 ```
 
-The telnet port defaults to `23`. The colon before `/path` is required; IPv6 addresses must be enclosed in square brackets.
+The telnet port defaults to `23`. The `:/path` suffix is optional — `push` defaults to `/tmp`, `detect` ignores it, `pull` requires it. IPv6 addresses must be enclosed in square brackets.
 
 Examples:
 
 ```text
-root:password@192.168.1.100:/tmp
-root:password@192.168.1.100:2323:/tmp
-root:password@[2001:db8::1]:/tmp
+root:password@192.168.1.100            # push (→ /tmp), detect
+root:password@192.168.1.100:2323       # with custom port
+root:password@192.168.1.100:/tmp       # explicit path (still works)
+root:password@[2001:db8::1]:/tmp       # IPv6
 ```
 
 Credentials in the target may be visible in shell history or process listings.
@@ -49,9 +50,9 @@ Add `--verbose` to any command for connection and transfer details.
 Typical commands:
 
 ```sh
-busyscout push firmware.bin root:password@192.168.1.100:/tmp/
+busyscout push firmware.bin root:password@192.168.1.100
 busyscout pull root:password@192.168.1.100:/tmp/config.db ./config.db
-busyscout detect root:password@192.168.1.100:/
+busyscout detect root:password@192.168.1.100
 ```
 
 `detect` reports the architecture, word size, endianness, ARM float ABI when applicable, libc, toolchain hint, and available OS information. For example:
