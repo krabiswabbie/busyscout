@@ -441,6 +441,10 @@ func NewPull(target string, verboseFlag bool) (*Scout, error) {
 		return nil, errorx.Decorate(err, "failed to parse remote address")
 	}
 
+	if remote.Path == "" {
+		return nil, errors.New("pull requires a remote file path")
+	}
+
 	return &Scout{
 		remote:  remote,
 		verbose: verboseFlag,
