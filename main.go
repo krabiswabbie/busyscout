@@ -51,9 +51,9 @@ func printUsage() {
 	fmt.Println(`BusyScout — push/pull files to embedded devices (IP cameras, NVR) via telnet.
 
 Usage:
-  busyscout push <local> user:pass@host[:port]/path [--verbose]
-  busyscout pull user:pass@host[:port]/path <local> [--verbose]
-  busyscout detect user:pass@host[:port]/path [--verbose]
+  busyscout push <local> user:pass@host[:port][:/path] [--verbose]
+  busyscout pull user:pass@host[:port]:/path <local> [--verbose]
+  busyscout detect user:pass@host[:port] [--verbose]
 
 Mode selection is automatic:
   Same subnet → fast TCP (~6-8 KB loader + line-speed transfer)
@@ -66,7 +66,7 @@ func cmdPush() {
 	args.Parse(os.Args[2:])
 
 	if args.NArg() < 2 {
-		fmt.Println("Usage: busyscout push <local> user:pass@host[:port]/path [--verbose]")
+		fmt.Println("Usage: busyscout push <local> user:pass@host[:port][:/path] [--verbose]")
 		os.Exit(1)
 	}
 
@@ -110,7 +110,7 @@ func cmdDetect() {
 	args.Parse(os.Args[2:])
 
 	if args.NArg() < 1 {
-		fmt.Println("Usage: busyscout detect user:pass@host[:port]/path [--verbose]")
+		fmt.Println("Usage: busyscout detect user:pass@host[:port] [--verbose]")
 		os.Exit(1)
 	}
 
