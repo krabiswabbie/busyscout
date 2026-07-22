@@ -25,9 +25,16 @@ func TestParseRemoteFileName(t *testing.T) {
 		// With telnet port
 		{"login:pass@192.168.10.18:2323:/tmp/filename", "login", "pass", "192.168.10.18", "2323", "/tmp/filename", false},
 
+		// No path (:/ optional)
+		{"login:pass@192.168.10.18", "login", "pass", "192.168.10.18", "23", "", false},
+		{"user@192.168.10.18", "user", "", "192.168.10.18", "23", "", false},
+		{"192.168.10.18", "", "", "192.168.10.18", "23", "", false},
+
+		// With port, no path
+		{"login:pass@192.168.10.18:2323", "login", "pass", "192.168.10.18", "2323", "", false},
+
 		// Error cases
 		{"", "", "", "", "", "", true},
-		{"login:pass@192.168.10.18", "login", "pass", "192.168.10.18", "23", "", true},
 		{"login:@192.168.10.18:/tmp/filename", "", "", "", "23", "", true},
 
 		// IPv6 cases
@@ -36,6 +43,9 @@ func TestParseRemoteFileName(t *testing.T) {
 		{"[2001:db8:85a3:8d3:1319:8a2e:370:7348]:/home", "", "", "[2001:db8:85a3:8d3:1319:8a2e:370:7348]", "23", "/home", false},
 		{"user:pass@[::ffff:192.0.2.1]:/var", "user", "pass", "[::ffff:192.0.2.1]", "23", "/var", false},
 		{"[fe80::1]:/usr/local", "", "", "[fe80::1]", "23", "/usr/local", false},
+
+		// IPv6, no path
+		{"root:pass@[2001:db8::1]", "root", "pass", "[2001:db8::1]", "23", "", false},
 
 		// IPv6 error cases
 		{"[2001:db8::1", "", "", "", "23", "", true},

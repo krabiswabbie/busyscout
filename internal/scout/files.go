@@ -21,16 +21,15 @@ func ParseRemoteFileName(input string) (*RemoteFile, error) {
 	}
 
 	var username, password, host, path string
-	hostEnd := strings.Index(input, ":/")
-	if hostEnd == -1 {
-		return nil, errors.New("invalid format: missing path separator")
+	hostPart := input
+	path = ""
+	if hostEnd := strings.Index(input, ":/"); hostEnd != -1 {
+		hostPart = input[:hostEnd]
+		path = input[hostEnd+1:]
 	}
 
-	hostPart := input[:hostEnd]
-	path = input[hostEnd+1:]
-
 	// Handle IPv6 addresses
-	if openBracket := strings.Index(hostPart, "["); openBracket > 0 {
+	if openBracket := strings.Index(hostPart, "["); openBracket != -1 {
 		closeBracket := strings.LastIndex(hostPart, "]")
 		if closeBracket == -1 {
 			return nil, errors.New("invalid IPv6 address: missing closing bracket")
@@ -80,10 +79,6 @@ func ParseRemoteFileName(input string) (*RemoteFile, error) {
 			}
 			host = hostPart
 		}
-	}
-
-	if strings.Count(path, ":") > 0 {
-		return nil, errors.New("invalid path format")
 	}
 
 	return &RemoteFile{
