@@ -55,7 +55,7 @@ busyscout pull root:password@192.168.1.100:/tmp/config.db ./config.db
 busyscout detect root:password@192.168.1.100
 ```
 
-`detect` reports the architecture, word size, endianness, ARM float ABI when applicable, libc, toolchain hint, and available OS information. For example:
+`detect` reports the architecture, word size, endianness, ARM float ABI when applicable, libc and its version, the `time_t` width where it can be established, a toolchain hint, and available OS information. For example:
 
 ```text
 Architecture:     ARMV7 (32-bit, little-endian)
@@ -65,6 +65,7 @@ Toolchain:        armv7-linux-uclibceabihf
 
 OS Profile:
   Kernel:    Linux (none) 4.9.84 #1 PREEMPT Thu Dec 21 14:08:11 CST 2023 armv7l GNU/Linux
+  Build:     Linux version 4.9.84 (root@builder) (gcc version 8.2.0 (GCC)) #1 PREEMPT Thu Dec 21 14:08:11 CST 2023
   BusyBox:   v1.20.2
   Device:    SStar Soc (Flattened Device Tree) (INFINITY6B0 SSC009A-S01A QFN88)
   Uptime:    10h 27m
@@ -77,6 +78,20 @@ OS Profile:
     /mnt : squashfs,ro,relatime
   Tools:     wget
 ```
+
+### musl and the time64 ABI
+
+On a musl device `detect` runs the dynamic loader to read its exact version, because musl 1.2.0 switched every 32-bit architecture to a 64-bit `time_t`. A toolchain from the other side of that boundary still links and starts, then passes mangled timestamp structures at runtime, so the version is reported alongside the toolchain triplet:
+
+```text
+Architecture:     ARMV7 (32-bit, little-endian)
+Float ABI:        hard-float (VFP)
+libc:             musl 1.2.3
+time_t:           64-bit (musl 1.2.3 >= 1.2.0)
+Toolchain:        armv7-linux-musleabihf  [needs a time64 toolchain: musl >= 1.2.0, device has 1.2.3]
+```
+
+If the loader cannot be run, the version is reported as unknown rather than guessed.
 
 ## Transfer modes
 
