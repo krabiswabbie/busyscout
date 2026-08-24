@@ -9,3 +9,6 @@ internal/helpers/bin/
 # Compiled binaries
 busyscout
 busyscout-linux
+
+# Local task index
+/BACKLOG.md
