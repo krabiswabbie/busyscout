@@ -106,6 +106,79 @@ lrwxrwxrwx 1 root root 12 Jan  1  2000 /lib/ld-musl-x86_64.so.1 -> /lib/libc.so`
 	}
 }
 
+func TestParseLibcMuslFloatABI(t *testing.T) {
+	tests := []struct {
+		name    string
+		output  string
+		wantABI string
+	}{
+		{
+			"hard-float loader name",
+			`lrwxrwxrwx 1 root root 12 Jan  1  2000 /lib/ld-musl-armhf.so.1 -> /lib/libc.so`,
+			"hard",
+		},
+		{
+			"soft-float loader name",
+			`lrwxrwxrwx 1 root root 12 Jan  1  2000 /lib/ld-musl-arm.so.1 -> /lib/libc.so`,
+			"soft",
+		},
+		{
+			"non-ARM loader says nothing about float ABI",
+			`lrwxrwxrwx 1 root root 12 Jan  1  2000 /lib/ld-musl-x86_64.so.1 -> /lib/libc.so`,
+			"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fp := &Fingerprint{}
+			parseLibc(tt.output, fp)
+			if fp.FloatABI != tt.wantABI {
+				t.Errorf("FloatABI = %q, want %q", fp.FloatABI, tt.wantABI)
+			}
+		})
+	}
+}
+
+func TestParseLibcMuslKeepsExistingFloatABI(t *testing.T) {
+	fp := &Fingerprint{FloatABI: "hard"}
+	parseLibc(`/lib/ld-musl-arm.so.1 -> /lib/libc.so`, fp)
+	if fp.FloatABI != "hard" {
+		t.Errorf("FloatABI = %q, want hard (already-determined ABI must win)", fp.FloatABI)
+	}
+}
+
+func TestParseProcVersionRecordsBuildWhenISAKnown(t *testing.T) {
+	const procVersion = "Linux version 5.10.61 (root@builder) (gcc version 7.3.0 (GCC)) #1 SMP Mon Jan 1 00:00:00 UTC 2024"
+
+	// uname already established the ISA — /proc/version must still be recorded,
+	// because it carries the toolchain the kernel was built with.
+	fp := &Fingerprint{ISA: "arm", WordSize: 32}
+	parseProcVersion(procVersion, fp)
+
+	if fp.KernelBuild != procVersion {
+		t.Errorf("KernelBuild = %q, want the full /proc/version line", fp.KernelBuild)
+	}
+	if fp.ISA != "arm" {
+		t.Errorf("ISA = %q, want arm (must not be overwritten)", fp.ISA)
+	}
+}
+
+func TestParseProcVersionFallsBackToISA(t *testing.T) {
+	fp := &Fingerprint{}
+	parseProcVersion("Linux version 4.9.37 (mips-linux-gnu-gcc) #1", fp)
+
+	if fp.ISA != "mips" {
+		t.Errorf("ISA = %q, want mips", fp.ISA)
+	}
+	if fp.WordSize != 32 {
+		t.Errorf("WordSize = %d, want 32", fp.WordSize)
+	}
+	if fp.KernelBuild == "" {
+		t.Error("expected KernelBuild to be recorded")
+	}
+}
+
 func TestParseFileOutput(t *testing.T) {
 	tests := []struct {
 		name    string

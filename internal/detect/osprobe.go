@@ -45,6 +45,19 @@ func probeOS(tc *telnet.TelnetClient, fp *Fingerprint) {
 		}
 	}
 
+	// musl version via loader execution. Run with no arguments the musl loader
+	// prints "musl libc (armhf)\nVersion 1.2.3\n..." on stderr and exits 1.
+	// The version decides the time64 ABI (see deriveTimeT), so it is worth the
+	// extra round trip — but only on a device already identified as musl.
+	if fp.Libc == "musl" {
+		if out, err := tc.Execute(muslVersionCmd); err == nil && len(out) > 0 {
+			if ver := parseMuslVersion(string(out)); ver != "" {
+				fp.MuslVersion = ver
+				fp.LibcVersion = "musl " + ver
+			}
+		}
+	}
+
 	// /proc/meminfo → TotalRAM
 	if out, err := tc.Execute("cat", "/proc/meminfo"); err == nil && len(out) > 0 {
 		fp.TotalRAM = parseMeminfoTotal(string(out))
@@ -94,6 +107,26 @@ func parseBusyBoxVersion(output string) string {
 // Output example: "GNU C Library (GNU libc) stable release version 2.28."
 func parseGlibcVersion(output string) string {
 	re := regexp.MustCompile(`version\s+([\d.]+)`)
+	if m := re.FindStringSubmatch(output); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// muslVersionCmd runs the musl dynamic loader with no arguments to make it
+// print its banner. The loop tolerates a missing loader (an unexpanded glob
+// fails the -f test) and stops at the first one found.
+const muslVersionCmd = `sh -c 'for f in /lib/ld-musl-*.so.1 /usr/lib/ld-musl-*.so.1; do [ -f "$f" ] || continue; "$f" 2>&1 | head -3; break; done'`
+
+// parseMuslVersion extracts the version from the musl loader banner.
+// Output example: "musl libc (armhf)\nVersion 1.2.3\nDynamic Program Loader"
+func parseMuslVersion(output string) string {
+	// The banner must identify itself as musl — a bare "Version N" line from
+	// some other binary must not be reported as a musl version.
+	if !strings.Contains(strings.ToLower(output), "musl") {
+		return ""
+	}
+	re := regexp.MustCompile(`(?i)version\s+(\d+\.\d+(?:\.\d+)*)`)
 	if m := re.FindStringSubmatch(output); m != nil {
 		return m[1]
 	}

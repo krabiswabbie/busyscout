@@ -83,10 +83,9 @@ func runPhase1(fp *Fingerprint, rm *scout.RemoteFile, verbose bool) error {
 		parseReadelfOutput(string(readelfOut), fp)
 	}
 
-	// 8. /proc/version as fallback for ISA hints
-	if fp.ISA == "" {
-		parseProcVersion(string(versionOut), fp)
-	}
+	// 8. /proc/version — always recorded (it carries the kernel's build toolchain);
+	//    also serves as an ISA fallback when uname gave nothing.
+	parseProcVersion(string(versionOut), fp)
 
 	// --- OS probe (best-effort, supplements architecture data) ---
 	probeOS(tc, fp)
@@ -214,12 +213,28 @@ func parseLibc(output string, fp *Fingerprint) {
 	case strings.Contains(output, "ld-musl"):
 		fp.Libc = "musl"
 		fp.LibcVersion = "musl"
+		parseMuslLoaderABI(output, fp)
 	case strings.Contains(output, "ld-uClibc"):
 		fp.Libc = extractUclibcVersion(output)
 		fp.LibcVersion = fp.Libc
 	case strings.Contains(output, "libc.so.6") || strings.Contains(output, "ld-linux"):
 		fp.Libc = "glibc"
 		fp.LibcVersion = "glibc"
+	}
+}
+
+// parseMuslLoaderABI derives the ARM float ABI from the musl loader's file name.
+// musl names its loader after the ABI it was built for: ld-musl-armhf.so.1 is
+// hard-float, ld-musl-arm.so.1 is soft-float.
+func parseMuslLoaderABI(output string, fp *Fingerprint) {
+	if fp.FloatABI != "" {
+		return
+	}
+	switch {
+	case strings.Contains(output, "ld-musl-armhf"):
+		fp.FloatABI = "hard"
+	case strings.Contains(output, "ld-musl-arm."):
+		fp.FloatABI = "soft"
 	}
 }
 
@@ -405,10 +420,15 @@ func parseReadelfOutput(output string, fp *Fingerprint) {
 	}
 }
 
-// parseProcVersion extracts architecture from /proc/version when uname fails.
+// parseProcVersion records /proc/version as KernelBuild and, when uname gave no
+// architecture, falls back to deriving the ISA from it.
 func parseProcVersion(output string, fp *Fingerprint) {
 	// Save full /proc/version as KernelBuild
 	fp.KernelBuild = strings.TrimSpace(output)
+
+	if fp.ISA != "" {
+		return
+	}
 
 	lower := strings.ToLower(output)
 	switch {

@@ -65,6 +65,60 @@ func TestParseGlibcVersion(t *testing.T) {
 	}
 }
 
+func TestParseMuslVersion(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect string
+	}{
+		{
+			// Captured from alpine:3.20 (post-time64).
+			name:   "real loader banner",
+			input:  "musl libc (aarch64)\nVersion 1.2.5\nDynamic Program Loader\n",
+			expect: "1.2.5",
+		},
+		{
+			// Captured from arm32v7 alpine:3.10 (pre-time64).
+			name:   "real armhf loader banner, pre-time64",
+			input:  "musl libc (armhf)\nVersion 1.1.22\nDynamic Program Loader\n",
+			expect: "1.1.22",
+		},
+		{
+			name:   "banner followed by usage line",
+			input:  "musl libc (armhf)\nVersion 1.2.3\nDynamic Program Loader\nUsage: /lib/ld-musl-armhf.so.1 [options] [--] pathname",
+			expect: "1.2.3",
+		},
+		{
+			name:   "two-component version",
+			input:  "musl libc (x86_64)\nVersion 1.2\nDynamic Program Loader",
+			expect: "1.2",
+		},
+		{
+			name:   "glibc banner must not be read as musl",
+			input:  "GNU C Library (GNU libc) stable release version 2.28.",
+			expect: "",
+		},
+		{
+			name:   "loader missing",
+			input:  "sh: /lib/ld-musl-armhf.so.1: not found",
+			expect: "",
+		},
+		{
+			name:   "empty",
+			input:  "",
+			expect: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseMuslVersion(tt.input)
+			if got != tt.expect {
+				t.Errorf("got %q, want %q", got, tt.expect)
+			}
+		})
+	}
+}
+
 func TestParseMeminfoTotal(t *testing.T) {
 	tests := []struct {
 		name   string
