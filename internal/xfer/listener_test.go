@@ -176,7 +176,12 @@ func TestAcceptAndPull_ErrorResponse(t *testing.T) {
 	}
 
 	// AcceptAndPull should return an error
-	if err := <-errCh; err == nil {
+	err = <-errCh
+	if err == nil {
 		t.Fatal("expected error from AcceptAndPull for missing file")
+	}
+	// The fileloader did run, another transfer mode would hit the same error
+	if isSetupError(err) {
+		t.Fatalf("remote error must not be a SetupError: %v", err)
 	}
 }

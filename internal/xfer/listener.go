@@ -36,7 +36,7 @@ func AcceptAndPush(ln net.Listener, localPath string) error {
 
 	conn, err := ln.Accept()
 	if err != nil {
-		return fmt.Errorf("accept: %w", err)
+		return &SetupError{fmt.Errorf("fileloader did not connect back: %w", err)}
 	}
 	defer conn.Close()
 
@@ -83,7 +83,7 @@ func AcceptAndPull(ln net.Listener, localPath string) error {
 
 	conn, err := ln.Accept()
 	if err != nil {
-		return fmt.Errorf("accept: %w", err)
+		return &SetupError{fmt.Errorf("fileloader did not connect back: %w", err)}
 	}
 	defer conn.Close()
 
