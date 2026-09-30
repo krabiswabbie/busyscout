@@ -45,7 +45,7 @@ Credentials in the target may be visible in shell history or process listings.
 | `pull` | `busyscout pull <target> <local>` | Download a remote file to the specified local path. |
 | `detect` | `busyscout detect <target>` | Identify the target architecture and collect a best-effort OS profile. |
 
-Add `--verbose` to any command for connection and transfer details.
+Add `--verbose` to any command for connection and transfer details. Flags may be placed before or after the other arguments.
 
 Typical commands:
 
@@ -95,10 +95,24 @@ If the loader cannot be run, the version is reported as unknown rather than gues
 
 ## Transfer modes
 
-BusyScout selects the transfer method automatically:
+BusyScout has two transfer methods:
 
 - **Reverse TCP:** a small matching fileloader connects from the device back to BusyScout. This is the fast path when the device can reach the workstation.
 - **Telnet fallback:** data is sent through the shell using `printf` and redirection. It is slower, but works when reverse connectivity is unavailable and does not depend on optional tools such as `base64`, `xxd`, or `nc`.
+
+`push` and `pull` choose between them according to `--mode`:
+
+| Mode | Behavior |
+| --- | --- |
+| `auto` (default) | Reverse TCP when the device is on the same subnet, telnet fallback otherwise. If the fileloader cannot be used — no variant matches the device, `/tmp` is mounted `noexec`, or the device cannot connect back — BusyScout prints a warning and repeats the transfer through the telnet fallback. |
+| `fast` | Reverse TCP only. A failure is reported as is, which helps when debugging the fileloader. |
+| `printf` | Telnet fallback only. Nothing is uploaded to the device except the file itself. |
+
+```sh
+busyscout push firmware.bin root:password@192.168.1.100 --mode=printf
+```
+
+A transfer that breaks halfway is never repeated automatically.
 
 BusyScout adapts the loader transfer to command-length limits found on restricted BusyBox systems. Important files should be verified separately: BusyScout reports transfer errors but does not provide encryption or cryptographic integrity verification.
 

@@ -28,13 +28,14 @@ type Scout struct {
 	localFile string
 	remote    *RemoteFile
 	verbose   bool
+	mode      Mode
 	bar       *progressbar.ProgressBar
 	isa       string // cached ISA from light detection
 	libc      string // cached libc from light detection
 	endian    string // "little" or "big" (only for MIPS)
 }
 
-func New(source, target string, verboseFlag bool) (*Scout, error) {
+func New(source, target string, mode Mode, verboseFlag bool) (*Scout, error) {
 	_, err := os.Stat(source)
 	if err != nil {
 		return nil, errorx.Decorate(err, "source file does not exist")
@@ -49,6 +50,7 @@ func New(source, target string, verboseFlag bool) (*Scout, error) {
 		localFile: source,
 		remote:    remote,
 		verbose:   verboseFlag,
+		mode:      mode,
 	}
 
 	// Default to /tmp if no remote path specified
@@ -169,21 +171,40 @@ func (s *Scout) fileloaderISA() string {
 }
 
 func (s *Scout) Push() error {
-	// Detect same subnet
-	if xfer.IsSameSubnet(s.remote.Host) {
-		if err := s.detectISALight(); err != nil {
-			// Fall through to printf mode on detection failure
-		} else {
-			tc, err := s.newClient()
-			if err != nil {
-				return err
-			}
-			defer tc.Close()
-			return xfer.Push(tc, s.localFile, s.remote.Path, s.fileloaderISA(), s.libc, s.remote.Host)
-		}
+	return s.transfer(s.pushFast, s.pushPrintf)
+}
+
+// transfer runs one of the two transfer methods according to the selected mode
+func (s *Scout) transfer(fast, printf func() error) error {
+	return runTransfer(s.mode, xfer.IsSameSubnet(s.remote.Host), fast, printf, func(cause error) {
+		fmt.Fprintf(os.Stderr, "warning: fast transfer is unavailable: %v\n", cause)
+		fmt.Fprintln(os.Stderr, "warning: falling back to printf mode, it is much slower")
+	})
+}
+
+// fastClient detects the device architecture and opens the connection for the
+// fileloader. A failed detection leaves the device untouched.
+func (s *Scout) fastClient() (*telnet.TelnetClient, error) {
+	if err := s.detectISALight(); err != nil {
+		return nil, &xfer.SetupError{Err: err}
 	}
 
-	// printf fallback
+	return s.newClient()
+}
+
+// pushFast uploads the file with the fileloader over reverse TCP
+func (s *Scout) pushFast() error {
+	tc, err := s.fastClient()
+	if err != nil {
+		return err
+	}
+	defer tc.Close()
+
+	return xfer.Push(tc, s.localFile, s.remote.Path, s.fileloaderISA(), s.libc, s.remote.Host)
+}
+
+// pushPrintf uploads the file in chunks with printf over telnet
+func (s *Scout) pushPrintf() error {
 	type jobDefinition struct {
 		fname string
 		data  []byte
@@ -411,31 +432,36 @@ func toUnixPath(path string) string {
 
 // Pull downloads a file from the remote device.
 func (s *Scout) Pull(localPath string) error {
-	// Detect same subnet
-	if xfer.IsSameSubnet(s.remote.Host) {
-		if err := s.detectISALight(); err != nil {
-			// Fall through to printf mode
-		} else {
-			tc, err := s.newClient()
-			if err != nil {
-				return err
-			}
-			defer tc.Close()
-			return xfer.Pull(tc, s.remote.Path, localPath, s.fileloaderISA(), s.libc, s.remote.Host)
-		}
-	}
+	return s.transfer(
+		func() error { return s.pullFast(localPath) },
+		func() error { return s.pullPrintf(localPath) },
+	)
+}
 
-	// printf fallback
+// pullFast downloads the file with the fileloader over reverse TCP
+func (s *Scout) pullFast(localPath string) error {
+	tc, err := s.fastClient()
+	if err != nil {
+		return err
+	}
+	defer tc.Close()
+
+	return xfer.Pull(tc, s.remote.Path, localPath, s.fileloaderISA(), s.libc, s.remote.Host)
+}
+
+// pullPrintf downloads the file through an encoder on the device over telnet
+func (s *Scout) pullPrintf(localPath string) error {
 	tc, err := s.newClient()
 	if err != nil {
 		return err
 	}
 	defer tc.Close()
+
 	return PullViaPrintf(tc, s.remote.Path, localPath)
 }
 
 // NewPull creates a Scout configured for downloading a file from a remote device.
-func NewPull(target string, verboseFlag bool) (*Scout, error) {
+func NewPull(target string, mode Mode, verboseFlag bool) (*Scout, error) {
 	remote, err := ParseRemoteFileName(target)
 	if err != nil {
 		return nil, errorx.Decorate(err, "failed to parse remote address")
@@ -448,5 +474,6 @@ func NewPull(target string, verboseFlag bool) (*Scout, error) {
 	return &Scout{
 		remote:  remote,
 		verbose: verboseFlag,
+		mode:    mode,
 	}, nil
 }
