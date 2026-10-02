@@ -2,7 +2,6 @@ package helpers
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/krabiswabbie/busyscout/internal/telnet"
 )
@@ -10,7 +9,14 @@ import (
 // UploadData sends binary data to a remote file via printf over an already-open telnet connection.
 // The caller owns the connection lifecycle (Dial/Close).
 func UploadData(tc *telnet.TelnetClient, data []byte, targetFileName string) error {
-	targetFileName = toUnixPath(targetFileName)
+	if err := telnet.ValidateShellPath(targetFileName); err != nil {
+		return err
+	}
+	target := telnet.ShellQuote(targetFileName)
+	if len(data) == 0 {
+		_, err := tc.ExecuteChecked(": > " + target)
+		return err
+	}
 	redirectMode := ">"
 
 	for i := 0; i < len(data); i += lineSize {
@@ -23,10 +29,10 @@ func UploadData(tc *telnet.TelnetClient, data []byte, targetFileName string) err
 		for _, bt := range data[i:end] {
 			cmd += fmt.Sprintf("\\%03o", bt)
 		}
-		cmd += fmt.Sprintf("' %s %s\n", redirectMode, targetFileName)
+		cmd += fmt.Sprintf("' %s %s", redirectMode, target)
 		redirectMode = ">>"
 
-		if _, err := tc.Execute(cmd); err != nil {
+		if _, err := tc.ExecuteChecked(cmd); err != nil {
 			return err
 		}
 	}
@@ -37,8 +43,3 @@ func UploadData(tc *telnet.TelnetClient, data []byte, targetFileName string) err
 const (
 	lineSize = 128
 )
-
-// toUnixPath converts a path to use forward slashes, regardless of platform
-func toUnixPath(path string) string {
-	return strings.ReplaceAll(path, "\\", "/")
-}

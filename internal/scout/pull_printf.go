@@ -4,11 +4,11 @@ package scout
 import (
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"os"
 	"strings"
 
 	"github.com/joomcode/errorx"
+	"github.com/krabiswabbie/busyscout/internal/telnet"
 )
 
 // PullViaPrintf downloads a remote file via printf channel (slow, for NAT scenarios).
@@ -44,13 +44,12 @@ type telnetExecutor interface {
 }
 
 func pullWithEncoder(tc telnetExecutor, remotePath, encoder string, decoder func([]byte) ([]byte, error)) ([]byte, error) {
-	cmd := fmt.Sprintf("%s %s", encoder, remotePath)
-	// Split encoder into command and args
-	parts := strings.Fields(cmd)
-	name := parts[0]
-	args := parts[1:]
-
-	stdout, err := tc.Execute(name, args...)
+	if err := telnet.ValidateShellPath(remotePath); err != nil {
+		return nil, err
+	}
+	// Keep the operand intact and quote it once for the remote shell. Use input
+	// redirection so even a relative name starting with '-' cannot be an option.
+	stdout, err := tc.Execute(encoder + " < " + telnet.ShellQuote(remotePath))
 	if err != nil {
 		return nil, errorx.Decorate(err, "encoder command failed")
 	}

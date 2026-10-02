@@ -45,7 +45,7 @@ Credentials in the target may be visible in shell history or process listings.
 | `pull` | `busyscout pull <target> <local>` | Download a remote file to the specified local path. |
 | `detect` | `busyscout detect <target>` | Identify the target architecture and collect a best-effort OS profile. |
 
-Add `--verbose` to any command for connection and transfer details.
+Add `--verbose` to any command for connection and transfer details. Flags may be placed before or after the other arguments.
 
 Typical commands:
 
@@ -95,12 +95,57 @@ If the loader cannot be run, the version is reported as unknown rather than gues
 
 ## Transfer modes
 
-BusyScout selects the transfer method automatically:
+BusyScout has two transfer methods:
 
 - **Reverse TCP:** a small matching fileloader connects from the device back to BusyScout. This is the fast path when the device can reach the workstation.
 - **Telnet fallback:** data is sent through the shell using `printf` and redirection. It is slower, but works when reverse connectivity is unavailable and does not depend on optional tools such as `base64`, `xxd`, or `nc`.
 
+`push` and `pull` choose between them according to `--mode`:
+
+| Mode | Behavior |
+| --- | --- |
+| `auto` (default) | Reverse TCP when the device is on the same subnet, telnet fallback otherwise. If the fileloader cannot be used — no variant matches the device, `/tmp` is mounted `noexec`, or the device cannot connect back — BusyScout prints a warning and repeats the transfer through the telnet fallback. |
+| `fast` | Reverse TCP only. A failure is reported as is, which helps when debugging the fileloader. |
+| `printf` | Telnet fallback only; no executable loader is uploaded. |
+
+```sh
+busyscout push firmware.bin root:password@192.168.1.100 --mode=printf
+```
+
+A transfer that breaks halfway is never repeated automatically.
+
 BusyScout adapts the loader transfer to command-length limits found on restricted BusyBox systems. Important files should be verified separately: BusyScout reports transfer errors but does not provide encryption or cryptographic integrity verification.
+
+### Overwriting files and completion
+
+Uploads write directly to the destination, truncating an existing regular file.
+There is no adjacent staging file or atomic replacement: interruption or an error
+can leave empty or partial contents. A destination directory uses the local
+basename; the resulting destination must be a regular file or a new file in an
+existing directory. Final symlinks (including dangling links), FIFOs, devices,
+sockets and other special destination types are rejected. Preliminary path
+checks do not guarantee writability or eliminate races with other processes.
+Spaces, quotes and shell metacharacters in remote filenames are treated literally;
+paths containing CR, LF or NUL are unsupported.
+
+The printf path checks every write and requires the final byte count to match.
+Its size check reads the destination with `wc`: a write-only file can be updated
+successfully and then produce an explicit size-verification/read error. The fast
+path requires an explicit completion reply after the helper has written all bytes
+and successfully closed the destination. Remote open, write and close errors are
+reported, and a missing reply is a failure. Neither method promises power-loss
+durability or performs `fsync`; matching size is not a content checksum.
+
+Each transfer owns an exclusively created private directory under `/tmp` for its
+fragments or loader. Cleanup is scoped to that directory after transfer workers
+finish, and is best effort if the Telnet connection has failed. Fast transfer
+bounds inactive socket operations to 30 seconds and waits at most 15 seconds for
+completion after sending; progress refreshes the data deadline. The helper also
+bounds socket inactivity to 30 seconds. A remote transfer error or missing reply
+never triggers an automatic retry through another mode. Printf downloads require
+a compatible `base64`, `xxd -p` or `od -An -t x1`; some old minimal BusyBox builds
+provide none of these encoders.
+
 
 ## Supported target platforms
 
@@ -110,11 +155,17 @@ The embedded helper variants cover:
 | --- | --- |
 | ARM 32-bit (v5/v6/v7) | Little-endian; glibc, uClibc, and musl; applicable soft- and hard-float variants |
 | AArch64 | Little-endian; glibc |
-| MIPS 32-bit | Little- and big-endian; uClibc |
+| MIPS 32-bit | Little-endian; uClibc; intended big-endian support has the build limitation below |
 | x86 32-bit | Little-endian; glibc |
 | x86_64 64-bit | Little-endian; glibc and musl |
 
 The helper must match the device CPU, byte order, ABI, libc, and dynamic loader.
+
+The current cached fileloader toolchains produce nine genuine ISA/libc outputs
+across ten filenames. Both `mipsel-uclibc` and `mips-uclibc` contain little-endian
+ELF; intended big-endian MIPS support is unavailable in these builds because
+linking with `-EB` fails against the cached little-endian `libgcc_s.so.1`.
+Big-endian MIPS runtime behavior has not been verified.
 
 ## Building from source
 

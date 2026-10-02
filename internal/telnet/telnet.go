@@ -41,6 +41,12 @@ const (
 	passwordRe = "Password:"
 )
 
+const (
+	escNone = iota
+	escStart
+	escCSI
+)
+
 // TelnetClient is basic descriptor
 type TelnetClient struct {
 	Login     string
@@ -53,6 +59,7 @@ type TelnetClient struct {
 	reader    *bufio.Reader
 	writer    *bufio.Writer
 	conn      net.Conn
+	esc       int
 }
 
 func (tc *TelnetClient) setDefaultParams() {
@@ -169,13 +176,56 @@ func (tc *TelnetClient) ReadByte() (b byte, err error) {
 	return
 }
 
-// SkipBytes skip a number of bytes (typically, sent command echo)
+// SkipBytes skip a number of bytes (typically, sent command echo).
+// ANSI escape sequences are skipped without being counted: BusyBox built with
+// FEATURE_EDITING_ASK_TERMINAL writes ESC[6n after each prompt, and it may
+// arrive only after the prompt has already been read.
 func (tc *TelnetClient) SkipBytes(n int) error {
-	for i := 0; i < n; i++ {
-		_, err := tc.reader.ReadByte()
+	for i := 0; i < n; {
+		b, err := tc.reader.ReadByte()
 		if err != nil {
 			return err
 		}
+		if !tc.inEscape(b) {
+			i++
+		}
+	}
+
+	return nil
+}
+
+// inEscape reports whether b belongs to an ANSI escape sequence. The state is
+// kept between calls, because a sequence may be split between two reads.
+func (tc *TelnetClient) inEscape(b byte) bool {
+	switch tc.esc {
+	case escNone:
+		if b != 0x1b {
+			return false
+		}
+		tc.esc = escStart
+	case escStart:
+		if b == '[' {
+			tc.esc = escCSI
+		} else {
+			tc.esc = escNone
+		}
+	case escCSI:
+		if b >= 0x40 && b <= 0x7e {
+			tc.esc = escNone
+		}
+	}
+
+	return true
+}
+
+// discardBuffered drops what is left of the previous command's output
+func (tc *TelnetClient) discardBuffered() error {
+	for tc.reader.Buffered() > 0 {
+		b, err := tc.reader.ReadByte()
+		if err != nil {
+			return err
+		}
+		tc.inEscape(b)
 	}
 
 	return nil
@@ -330,8 +380,7 @@ func (tc *TelnetClient) Execute(
 	name string,
 	args ...string,
 ) (stdout []byte, err error) {
-	_, err = tc.reader.Discard(tc.reader.Buffered())
-	if err != nil {
+	if err = tc.discardBuffered(); err != nil {
 		return
 	}
 
@@ -342,7 +391,9 @@ func (tc *TelnetClient) Execute(
 
 	request := []byte(name + " " + strings.Join(args, " ") + "\r\n")
 	tc.log("Send command: %s", request[:len(request)-2])
-	tc.Write(request)
+	if _, err = tc.Write(request); err != nil {
+		return
+	}
 
 	err = tc.SkipBytes(len(request))
 	if err != nil {

@@ -79,6 +79,10 @@ func TestAcceptAndPush(t *testing.T) {
 		t.Fatalf("data mismatch: want %q, got %q", want, got)
 	}
 
+	if _, err := conn.Write([]byte{0x05}); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := <-errCh; err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +180,12 @@ func TestAcceptAndPull_ErrorResponse(t *testing.T) {
 	}
 
 	// AcceptAndPull should return an error
-	if err := <-errCh; err == nil {
+	err = <-errCh
+	if err == nil {
 		t.Fatal("expected error from AcceptAndPull for missing file")
+	}
+	// The fileloader did run, another transfer mode would hit the same error
+	if isSetupError(err) {
+		t.Fatalf("remote error must not be a SetupError: %v", err)
 	}
 }
