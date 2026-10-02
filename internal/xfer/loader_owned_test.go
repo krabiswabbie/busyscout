@@ -15,8 +15,8 @@ import (
 )
 
 func TestLoaderCheckedOwnedScratchAndLiteralInvocation(t *testing.T) {
-	// The fixture blocks the legacy shared location before eval can redirect to
-	// it, protecting unrelated resources even when run against the old code.
+	// Keep cleanup away from the legacy shared location. Do not redefine eval:
+	// dash rejects functions named after special builtins before emitting a prompt.
 	for _, tt := range []struct{ name, init, cause string }{
 		{"success", "", ""},
 		{"chmod refused", `chmod() { printf 'chmod refused\n' >&2; return 23; };`, "chmod refused"},
@@ -29,7 +29,7 @@ func TestLoaderCheckedOwnedScratchAndLiteralInvocation(t *testing.T) {
 			var mu sync.Mutex
 			var dirs []string
 			re := regexp.MustCompile(`/tmp/bs-loader-[0-9a-f]+`)
-			init := `eval() { case "$1" in *"'/tmp/bs-loader'"*) printf 'legacy shared loader blocked\n' >&2; return 31;; esac; command eval "$1"; }; rm() { for arg do case "$arg" in /tmp/bs-loader) return 0;; esac; done; command rm "$@"; }; ` + tt.init
+			init := `rm() { for arg do case "$arg" in /tmp/bs-loader) return 0;; esac; done; command rm "$@"; }; ` + tt.init
 			host := testutil.StartShell(t, testutil.ShellOptions{Dir: dir, Init: init, OnCommand: func(cmd string) {
 				mu.Lock()
 				defer mu.Unlock()
