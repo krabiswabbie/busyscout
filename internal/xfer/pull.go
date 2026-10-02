@@ -17,7 +17,6 @@ func Pull(tc *telnet.TelnetClient, remotePath, localPath, isa, libc, hostIP stri
 		return err
 	}
 	defer ln.Close()
-	defer removeLoader(tc)
 
 	// Accept connection and receive file (loader sends TYPE_PULL + TYPE_DATA)
 	if err := AcceptAndPull(ln, localPath); err != nil {

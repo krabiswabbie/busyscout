@@ -14,7 +14,6 @@ func Push(tc *telnet.TelnetClient, localPath, remotePath, isa, libc, hostIP stri
 		return err
 	}
 	defer ln.Close()
-	defer removeLoader(tc)
 
 	// Accept connection and push file
 	if err := AcceptAndPush(ln, localPath); err != nil {

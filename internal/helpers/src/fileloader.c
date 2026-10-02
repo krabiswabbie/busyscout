@@ -9,6 +9,9 @@
  * PUSH (BusyScout → device):
  *   [1B type=0x01] [4B namelen] [filename] [8B filesize] [data bytes...]
  *
+ * PUSH completion: [1B type=0x05] after write and close succeed.
+ * Failure: [1B type=0x04] [4B msglen] [error message].
+ *
  * PULL (device → BusyScout):
  *   loader reads file from device disk, sends:
  *     [1B type=0x02] [4B namelen] [filename]
@@ -22,17 +25,21 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <stdint.h>
+#include <signal.h>
+#include <sys/time.h>
 
 #define TYPE_PUSH  0x01
 #define TYPE_PULL  0x02
 #define TYPE_DATA  0x03
 #define TYPE_ERROR 0x04
+#define TYPE_OK    0x05
 
 static int connect_to(const char *ip, int port) {
     struct addrinfo hints, *res, *rp;
@@ -72,7 +79,9 @@ static int read_full(int fd, void *buf, size_t n) {
     size_t total = 0;
     while (total < n) {
         ssize_t r = read(fd, (char *)buf + total, n - total);
-        if (r <= 0) return -1;
+        if (r < 0 && errno == EINTR) continue;
+        if (r == 0) { errno = ECONNRESET; return -1; }
+        if (r < 0) return -1;
         total += (size_t)r;
     }
     return 0;
@@ -82,7 +91,9 @@ static int write_full(int fd, const void *buf, size_t n) {
     size_t total = 0;
     while (total < n) {
         ssize_t w = write(fd, (const char *)buf + total, n - total);
-        if (w <= 0) return -1;
+        if (w < 0 && errno == EINTR) continue;
+        if (w == 0) { errno = EIO; return -1; }
+        if (w < 0) return -1;
         total += (size_t)w;
     }
     return 0;
@@ -119,23 +130,59 @@ static int write_u64(int fd, uint64_t v) {
     return write_u32(fd, lo);
 }
 
+/* A plain close with unread incoming payload can reset TCP and erase the
+ * diagnostic. Half-close the reply, then drain for at most two seconds. */
+static void finish_error_reply(int sock) {
+    struct timeval start, now;
+    char discard[4096];
+    gettimeofday(&start, NULL);
+    shutdown(sock, SHUT_WR);
+    for (;;) {
+        gettimeofday(&now, NULL);
+        long elapsed = (now.tv_sec - start.tv_sec) * 1000000L + now.tv_usec - start.tv_usec;
+        if (elapsed >= 2000000L) break;
+        struct timeval remaining = {0, 0};
+        long micros = 2000000L - elapsed;
+        remaining.tv_sec = micros / 1000000L;
+        remaining.tv_usec = micros % 1000000L;
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(sock, &fds);
+        int ready = select(sock + 1, &fds, NULL, NULL, &remaining);
+        if (ready < 0 && errno == EINTR) continue;
+        if (ready <= 0) break;
+        ssize_t n = recv(sock, discard, sizeof(discard), MSG_DONTWAIT);
+        if (n < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) continue;
+        if (n <= 0) break;
+    }
+}
+
+/* Preserve the syscall cause before close/send can change errno. */
+static int send_error(int sock, const char *context, int cause) {
+    unsigned char type = TYPE_ERROR;
+    char message[4096];
+    snprintf(message, sizeof(message), "%s: %s", context, strerror(cause));
+    size_t n = strlen(message);
+    if (write_full(sock, &type, 1) == 0 && write_u32(sock, (uint32_t)n) == 0)
+        write_full(sock, message, n);
+    finish_error_reply(sock);
+    return 1;
+}
+
 static int do_push(int sock, const char *filename) {
     /* Read type byte */
     unsigned char type;
     if (read_full(sock, &type, 1) < 0) {
-        fprintf(stderr, "read type failed\n");
-        return 1;
+        return send_error(sock, "read type", errno);
     }
     if (type != TYPE_PUSH) {
-        fprintf(stderr, "expected PUSH type (0x01), got 0x%02x\n", type);
-        return 1;
+        return send_error(sock, "expected PUSH type", EPROTO);
     }
 
     /* Read filename (we already know it, but consume from stream) */
     uint32_t namelen;
     if (read_u32(sock, &namelen) < 0) {
-        fprintf(stderr, "read namelen failed\n");
-        return 1;
+        return send_error(sock, "read namelen", errno);
     }
     /* Skip filename bytes */
     char buf[4096];
@@ -143,8 +190,7 @@ static int do_push(int sock, const char *filename) {
     while (remaining > 0) {
         uint32_t chunk = remaining > sizeof(buf) ? (uint32_t)sizeof(buf) : remaining;
         if (read_full(sock, buf, chunk) < 0) {
-            fprintf(stderr, "read filename failed\n");
-            return 1;
+            return send_error(sock, "read filename", errno);
         }
         remaining -= chunk;
     }
@@ -152,15 +198,13 @@ static int do_push(int sock, const char *filename) {
     /* Read filesize */
     uint64_t filesize;
     if (read_u64(sock, &filesize) < 0) {
-        fprintf(stderr, "read filesize failed\n");
-        return 1;
+        return send_error(sock, "read filesize", errno);
     }
 
     /* Open output file */
     int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) {
-        perror("open output");
-        return 1;
+        return send_error(sock, "open output", errno);
     }
 
     /* Copy data */
@@ -169,34 +213,28 @@ static int do_push(int sock, const char *filename) {
         uint64_t chunk = filesize - copied;
         if (chunk > sizeof(buf)) chunk = sizeof(buf);
         if (read_full(sock, buf, (size_t)chunk) < 0) {
-            fprintf(stderr, "read data failed\n");
+            int cause = errno;
             close(fd);
-            return 1;
+            return send_error(sock, "read data", cause);
         }
         if (write_full(fd, buf, (size_t)chunk) < 0) {
-            perror("write output");
+            int cause = errno;
             close(fd);
-            return 1;
+            return send_error(sock, "write output", cause);
         }
         copied += chunk;
     }
 
-    close(fd);
-    return 0;
+    if (close(fd) < 0) return send_error(sock, "close output", errno);
+    unsigned char ok = TYPE_OK;
+    return write_full(sock, &ok, 1) < 0 ? 1 : 0;
 }
 
 static int do_pull(int sock, const char *filename) {
     /* Open and read the file from device's disk */
     int fd = open(filename, O_RDONLY);
     if (fd < 0) {
-        /* Send error response */
-        unsigned char err_type = TYPE_ERROR;
-        write_full(sock, &err_type, 1);
-        const char *errmsg = strerror(errno);
-        uint32_t msglen = (uint32_t)strlen(errmsg);
-        write_u32(sock, msglen);
-        write_full(sock, errmsg, msglen);
-        return 1;
+        return send_error(sock, "open input", errno);
     }
 
     /* Get file size */
@@ -280,6 +318,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    signal(SIGPIPE, SIG_IGN);
+
     // Daemonize: double-fork to survive shell exit / telnetd hangup.
     // BusyBox ash kills background jobs when the shell exits, so the
     // fileloader must detach from its parent session before the shell
@@ -300,6 +340,11 @@ int main(int argc, char **argv) {
 
     int sock = connect_to(ip, port);
     if (sock < 0) return 1;
+
+    /* Bound inactivity per socket operation, allowing progressing transfers. */
+    struct timeval timeout = {30, 0};
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
     int rc;
     if (strcmp(mode, "push") == 0) {

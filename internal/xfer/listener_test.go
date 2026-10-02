@@ -79,6 +79,10 @@ func TestAcceptAndPush(t *testing.T) {
 		t.Fatalf("data mismatch: want %q, got %q", want, got)
 	}
 
+	if _, err := conn.Write([]byte{0x05}); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := <-errCh; err != nil {
 		t.Fatal(err)
 	}

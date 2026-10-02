@@ -391,7 +391,9 @@ func (tc *TelnetClient) Execute(
 
 	request := []byte(name + " " + strings.Join(args, " ") + "\r\n")
 	tc.log("Send command: %s", request[:len(request)-2])
-	tc.Write(request)
+	if _, err = tc.Write(request); err != nil {
+		return
+	}
 
 	err = tc.SkipBytes(len(request))
 	if err != nil {

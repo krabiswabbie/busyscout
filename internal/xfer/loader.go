@@ -1,22 +1,17 @@
 package xfer
 
 import (
-	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
-	"regexp"
+	"sync"
+	"time"
 
 	"github.com/joomcode/errorx"
 	"github.com/krabiswabbie/busyscout/internal/helpers"
 	"github.com/krabiswabbie/busyscout/internal/telnet"
 )
-
-const loaderPath = "/tmp/bs-loader"
-
-// loaderStatusMarker precedes the fileloader's exit status in the shell output
-const loaderStatusMarker = "bs-rc="
-
-var loaderStatusRe = regexp.MustCompile(loaderStatusMarker + `(\d+)`)
 
 // SetupError is a fast path failure that happened before any file data was
 // transferred, so the transfer can be safely retried in another mode.
@@ -44,76 +39,69 @@ func startLoader(tc *telnet.TelnetClient, mode, remotePath, isa, libc, hostIP st
 
 	ln, err := runLoader(tc, loader, mode, remotePath, hostIP)
 	if err != nil {
-		removeLoader(tc)
 		return nil, &SetupError{err}
 	}
 
 	return ln, nil
 }
 
+// ownedLoaderListener ties scratch cleanup to this invocation's listener. It
+// is closed only after AcceptAndPush/Pull has finished all network workers.
+type ownedLoaderListener struct {
+	net.Listener
+	cleanup func()
+	once    sync.Once
+}
+
+func (l *ownedLoaderListener) Close() error {
+	err := l.Listener.Close()
+	l.once.Do(l.cleanup)
+	return err
+}
+func (l *ownedLoaderListener) SetDeadline(t time.Time) error {
+	return l.Listener.(*net.TCPListener).SetDeadline(t)
+}
+
 func runLoader(tc *telnet.TelnetClient, loader []byte, mode, remotePath, hostIP string) (net.Listener, error) {
-	// 2. Upload fileloader via printf
+	if err := telnet.ValidateShellPath(remotePath); err != nil {
+		return nil, err
+	}
+	if mode != "push" && mode != "pull" {
+		return nil, fmt.Errorf("unsupported loader mode %q", mode)
+	}
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return nil, fmt.Errorf("generate loader directory: %w", err)
+	}
+	dir := "/tmp/bs-loader-" + hex.EncodeToString(nonce[:])
+	// No mkdir -p: an existing object must never become this invocation's resource.
+	if _, err := tc.ExecuteChecked("umask 077; mkdir " + telnet.ShellQuote(dir)); err != nil {
+		return nil, errorx.Decorate(err, "create loader directory")
+	}
+	cleanup := func() { tc.ExecuteChecked("rm -rf " + telnet.ShellQuote(dir)) }
+	success := false
+	defer func() {
+		if !success {
+			cleanup()
+		}
+	}()
+	loaderPath := dir + "/fileloader"
 	if err := helpers.UploadData(tc, loader, loaderPath); err != nil {
 		return nil, errorx.Decorate(err, "failed to upload fileloader")
 	}
-
-	// 3. chmod +x
-	if _, err := tc.Execute("chmod", "+x", loaderPath); err != nil {
+	if _, err := tc.ExecuteChecked("chmod +x " + telnet.ShellQuote(loaderPath)); err != nil {
 		return nil, errorx.Decorate(err, "failed to chmod loader")
 	}
-
-	// 4. Start TCP listener
 	port, ln, err := StartListener()
 	if err != nil {
 		return nil, errorx.Decorate(err, "failed to start listener")
 	}
-
-	// 5. Execute fileloader on device. It daemonizes, so the command returns
-	// at once, and its exit status tells whether the loader could start at all.
-	// Determine BusyScout's IP reachable from device — use the same interface as device
 	busyIP := getLocalIPForDevice(hostIP)
-	out, err := tc.Execute(loaderPath, mode, busyIP, fmt.Sprintf("%d", port), remotePath+";", "echo", loaderStatusMarker+"$?")
-	if err != nil {
+	command := telnet.ShellQuote(loaderPath) + " " + telnet.ShellQuote(mode) + " " + telnet.ShellQuote(busyIP) + " " + telnet.ShellQuote(fmt.Sprintf("%d", port)) + " " + telnet.ShellQuote(remotePath)
+	if _, err := tc.ExecuteChecked(command); err != nil {
 		ln.Close()
 		return nil, errorx.Decorate(err, "failed to start fileloader on device")
 	}
-	if err := loaderStartError(out); err != nil {
-		ln.Close()
-		return nil, err
-	}
-
-	return ln, nil
-}
-
-// loaderStartError reports a fileloader that could not start on the device,
-// judging by the shell output of the start command. It returns nil if the
-// loader started, and also if the shell did not report the exit status.
-func loaderStartError(output []byte) error {
-	matches := loaderStatusRe.FindAllSubmatchIndex(output, -1)
-	if len(matches) == 0 {
-		return nil
-	}
-
-	last := matches[len(matches)-1]
-	status := string(output[last[2]:last[3]])
-	if status == "0" {
-		return nil
-	}
-
-	// The line before the status is what the shell said about the failure,
-	// unless it is the tail of the command echo
-	before := bytes.TrimSpace(output[:last[0]])
-	if idx := bytes.LastIndexByte(before, '\n'); idx >= 0 {
-		before = bytes.TrimSpace(before[idx+1:])
-	}
-	if len(before) == 0 || bytes.Contains(before, []byte(loaderStatusMarker)) {
-		return fmt.Errorf("fileloader did not start on the device (exit status %s)", status)
-	}
-
-	return fmt.Errorf("fileloader did not start on the device (exit status %s): %s", status, before)
-}
-
-// removeLoader deletes the fileloader from the device (best-effort)
-func removeLoader(tc *telnet.TelnetClient) {
-	tc.Execute("rm", "-f", loaderPath)
+	success = true
+	return &ownedLoaderListener{Listener: ln, cleanup: cleanup}, nil
 }
