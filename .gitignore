@@ -2,9 +2,10 @@
 releases
 internal/helpers/bin/
 
-# Qwen Code assistant files
+# Local workspace files
 .qwen/
 .superpowers/
+/docs/superpowers/
 
 # Compiled binaries
 busyscout
